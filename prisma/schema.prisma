@@ -1,0 +1,73 @@
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  CLIENT
+  TECHNICIAN
+  ADMIN
+}
+
+enum TechnicianApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ServiceCategory {
+  ELECTRICITY
+  PLUMBING
+  GAS
+  LOCKSMITH
+  MASONRY
+}
+
+enum ServiceRequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         UserRole
+  createdAt    DateTime @default(now())
+
+  technician      Technician?
+  serviceRequests ServiceRequest[]
+}
+
+model Technician {
+  id             String                   @id @default(uuid()) @db.Uuid
+  userId         String                   @unique @db.Uuid
+  specialty      ServiceCategory
+  approvalStatus TechnicianApprovalStatus @default(PENDING)
+
+  user            User             @relation(fields: [userId], references: [id])
+  serviceRequests ServiceRequest[]
+}
+
+model ServiceRequest {
+  id           String               @id @default(uuid()) @db.Uuid
+  clientId     String               @db.Uuid
+  technicianId String?              @db.Uuid
+  category     ServiceCategory
+  description  String
+  status       ServiceRequestStatus @default(PENDING)
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  client     User        @relation(fields: [clientId], references: [id])
+  technician Technician? @relation(fields: [technicianId], references: [id])
+}
