@@ -31,9 +31,16 @@ enum ServiceCategory {
 enum ServiceRequestStatus {
   PENDING
   ACCEPTED
-  REJECTED
   IN_PROGRESS
   COMPLETED
+  CANCELLED
+}
+
+enum ServiceOfferStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  EXPIRED
 }
 
 model User {
@@ -42,32 +49,87 @@ model User {
   email        String   @unique
   passwordHash String
   role         UserRole
-  createdAt    DateTime @default(now())
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
 
-  technician      Technician?
-  serviceRequests ServiceRequest[]
+  technician        Technician?
+  serviceRequests   ServiceRequest[] @relation("RequestClient")
+  cancelledRequests ServiceRequest[] @relation("RequestCancelledBy")
 }
 
 model Technician {
   id             String                   @id @default(uuid()) @db.Uuid
   userId         String                   @unique @db.Uuid
-  specialty      ServiceCategory
   approvalStatus TechnicianApprovalStatus @default(PENDING)
 
-  user            User             @relation(fields: [userId], references: [id])
+  user            User                     @relation(fields: [userId], references: [id])
+  specialties     TechnicianSpecialty[]
+  neighborhoods   TechnicianNeighborhood[]
   serviceRequests ServiceRequest[]
+  offers          ServiceOffer[]
+}
+
+model TechnicianSpecialty {
+  technicianId String          @db.Uuid
+  category     ServiceCategory
+  licenseNumber String?
+
+  technician Technician @relation(fields: [technicianId], references: [id])
+
+  @@id([technicianId, category])
+}
+
+model Neighborhood {
+  id   String @id @default(uuid()) @db.Uuid
+  name String @unique
+
+  technicians TechnicianNeighborhood[]
+  requests    ServiceRequest[]
+}
+
+model TechnicianNeighborhood {
+  technicianId   String @db.Uuid
+  neighborhoodId String @db.Uuid
+
+  technician   Technician   @relation(fields: [technicianId], references: [id])
+  neighborhood Neighborhood @relation(fields: [neighborhoodId], references: [id])
+
+  @@id([technicianId, neighborhoodId])
 }
 
 model ServiceRequest {
-  id           String               @id @default(uuid()) @db.Uuid
-  clientId     String               @db.Uuid
-  technicianId String?              @db.Uuid
-  category     ServiceCategory
-  description  String
-  status       ServiceRequestStatus @default(PENDING)
-  createdAt    DateTime             @default(now())
-  updatedAt    DateTime             @updatedAt
+  id             String               @id @default(uuid()) @db.Uuid
+  clientId       String               @db.Uuid
+  technicianId   String?              @db.Uuid
+  neighborhoodId String               @db.Uuid
+  category       ServiceCategory
+  addressLine    String
+  description    String
+  status         ServiceRequestStatus @default(PENDING)
+  createdAt      DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime             @updatedAt @db.Timestamptz(3)
+  acceptedAt     DateTime?            @db.Timestamptz(3)
+  completedAt    DateTime?            @db.Timestamptz(3)
+  cancelledAt    DateTime?            @db.Timestamptz(3)
+  cancelledById  String?              @db.Uuid
 
-  client     User        @relation(fields: [clientId], references: [id])
-  technician Technician? @relation(fields: [technicianId], references: [id])
+  client       User          @relation("RequestClient", fields: [clientId], references: [id])
+  cancelledBy  User?         @relation("RequestCancelledBy", fields: [cancelledById], references: [id])
+  technician   Technician?   @relation(fields: [technicianId], references: [id])
+  neighborhood Neighborhood  @relation(fields: [neighborhoodId], references: [id])
+  offers       ServiceOffer[]
+}
+
+model ServiceOffer {
+  id           String             @id @default(uuid()) @db.Uuid
+  requestId    String             @db.Uuid
+  technicianId String             @db.Uuid
+  status       ServiceOfferStatus @default(PENDING)
+  createdAt    DateTime           @default(now()) @db.Timestamptz(3)
+  expiresAt    DateTime           @db.Timestamptz(3)
+
+  request    ServiceRequest @relation(fields: [requestId], references: [id])
+  technician Technician     @relation(fields: [technicianId], references: [id])
+
+  @@index([requestId, technicianId, status])
+  @@index([technicianId, status, expiresAt])
 }
