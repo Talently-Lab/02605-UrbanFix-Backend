@@ -1,0 +1,318 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+
+const { registerUser } = require('../src/services/auth.service');
+
+test('registra un CLIENT con contraseña hasheada y respuesta segura', async () => {
+  const input = {
+    name: 'Cliente de prueba',
+    email: 'cliente@example.com',
+    password: '12345678',
+    role: 'CLIENT',
+    phone: '+5491123456789',
+  };
+
+  const passwordHash = 'hash-simulado';
+
+  let savedData;
+
+  const prisma = {
+    user: {
+      create: async ({ data }) => {
+        savedData = data;
+
+        return {
+          id: 'user-123',
+          ...data,
+        };
+      },
+    },
+  };
+
+  const hashPassword = async (password) => {
+    assert.equal(password, input.password);
+    return passwordHash;
+  };
+
+  const result = await registerUser(input, {
+    prisma,
+    hashPassword,
+  });
+
+  assert.equal(savedData.passwordHash, passwordHash);
+  assert.notEqual(savedData.passwordHash, input.password);
+  assert.equal(savedData.email, input.email);
+  assert.equal(savedData.role, 'CLIENT');
+
+  assert.equal(result.id, 'user-123');
+  assert.equal(result.email, input.email);
+  assert.equal(result.role, 'CLIENT');
+
+  assert.equal(
+    Object.hasOwn(result, 'passwordHash'),
+    false,
+    'La respuesta no debe exponer passwordHash',
+  );
+
+  assert.equal(
+    Object.hasOwn(result, 'password'),
+    false,
+    'La respuesta no debe exponer la contraseña',
+  );
+});
+
+test('devuelve error 409 cuando el email ya está registrado', async () => {
+  const input = {
+    name: 'Cliente de prueba',
+    email: 'cliente@example.com',
+    password: '12345678',
+    role: 'CLIENT',
+    phone: '+5491123456789',
+  };
+
+  const prisma = {
+    user: {
+      create: async () => {
+        const error = new Error('Unique constraint failed');
+        error.code = 'P2002';
+        error.meta = { target: 'User_email_case_insensitive' };
+        throw error;
+      },
+    },
+  };
+
+  const hashPassword = async () => 'hash-simulado';
+
+  await assert.rejects(
+    registerUser(input, { prisma, hashPassword }),
+    (error) => {
+      assert.equal(error.status, 409);
+      assert.equal(error.message, 'El email ya está registrado');
+      return true;
+    },
+  );
+});
+
+test('no confunde otras restricciones únicas con un email duplicado', async () => {
+  const input = {
+    name: 'Cliente de prueba',
+    email: 'cliente@example.com',
+    password: '12345678',
+    role: 'CLIENT',
+    phone: '+5491123456789',
+  };
+
+  const prismaError = new Error('Unique constraint failed');
+  prismaError.code = 'P2002';
+  prismaError.meta = { target: ['id'] };
+
+  const prisma = {
+    user: {
+      create: async () => {
+        throw prismaError;
+      },
+    },
+  };
+
+  await assert.rejects(
+    registerUser(input, {
+      prisma,
+      hashPassword: async () => 'hash-simulado',
+    }),
+    (error) => {
+      assert.equal(error, prismaError);
+      return true;
+    },
+  );
+});
+
+test('devuelve 409 cuando Prisma identifica el índice de email en driverAdapterError', async () => {
+  const input = {
+    name: 'Cliente de prueba',
+    email: 'cliente@example.com',
+    password: '12345678',
+    role: 'CLIENT',
+    phone: '+5491123456789',
+  };
+
+  const prismaError = new Error('Unique constraint failed');
+  prismaError.code = 'P2002';
+  prismaError.meta = {
+    modelName: 'User',
+    driverAdapterError: {
+      cause: {
+        kind: 'UniqueConstraintViolation',
+        constraint: {
+          index: 'User_email_case_insensitive',
+        },
+      },
+    },
+  };
+
+  const prisma = {
+    user: {
+      create: async () => {
+        throw prismaError;
+      },
+    },
+  };
+
+  await assert.rejects(
+    registerUser(input, {
+      prisma,
+      hashPassword: async () => 'hash-simulado',
+    }),
+    (error) => {
+      assert.equal(error.status, 409);
+      assert.equal(error.message, 'El email ya está registrado');
+      return true;
+    },
+  );
+});
+
+test('registra un TECHNICIAN con especialidades y barrios dentro de una transacción', async () => {
+  const input = {
+    name: 'Técnico de prueba',
+    email: 'tecnico@example.com',
+    password: '12345678',
+    role: 'TECHNICIAN',
+    specialties: [
+      { category: 'PLUMBING' },
+      { category: 'GAS', licenseNumber: 'MAT-123' },
+    ],
+    neighborhoodIds: ['11111111-1111-4111-8111-111111111111'],
+  };
+
+  const calls = [];
+  const userId = '22222222-2222-4222-8222-222222222222';
+
+  const tx = {
+    user: {
+      create: async ({ data }) => {
+        calls.push({ operation: 'user.create', data });
+
+        return {
+          id: userId,
+          ...data,
+        };
+      },
+    },
+    technician: {
+      create: async ({ data }) => {
+        calls.push({ operation: 'technician.create', data });
+
+        return { id: 'technician-id', ...data };
+      },
+    },
+  };
+
+  const prisma = {
+    $transaction: async (callback) => {
+      calls.push({ operation: 'transaction.begin' });
+      const result = await callback(tx);
+      calls.push({ operation: 'transaction.commit' });
+      return result;
+    },
+  };
+
+  const result = await registerUser(input, {
+    prisma,
+    hashPassword: async () => 'hash-simulado',
+  });
+
+  assert.deepEqual(
+    calls.map((call) => call.operation),
+    [
+      'transaction.begin',
+      'user.create',
+      'technician.create',
+      'transaction.commit',
+    ],
+  );
+
+  assert.equal(calls[1].data.email, input.email);
+  assert.equal(calls[1].data.passwordHash, 'hash-simulado');
+  assert.equal(calls[1].data.role, 'TECHNICIAN');
+  assert.equal(calls[1].data.phone, null);
+
+  assert.equal(calls[2].data.userId, userId);
+  assert.equal(calls[2].data.approvalStatus, 'PENDING');
+
+  assert.deepEqual(calls[2].data.specialties, {
+    create: [
+      { category: 'PLUMBING' },
+      { category: 'GAS', licenseNumber: 'MAT-123' },
+    ],
+  });
+
+  assert.deepEqual(calls[2].data.neighborhoods, {
+    create: [{ neighborhoodId: input.neighborhoodIds[0] }],
+  });
+
+  assert.equal(result.id, userId);
+  assert.equal(result.passwordHash, undefined);
+});
+
+test('no confirma un registro parcial si falla la creación del técnico', async () => {
+  const input = {
+    name: 'Técnico de prueba',
+    email: 'tecnico@example.com',
+    password: '12345678',
+    role: 'TECHNICIAN',
+    specialties: [{ category: 'PLUMBING' }],
+    neighborhoodIds: ['11111111-1111-4111-8111-111111111111'],
+  };
+
+  const calls = [];
+  const databaseError = new Error('Error al crear el perfil técnico');
+
+  const tx = {
+    user: {
+      create: async () => {
+        calls.push('user.create');
+        return { id: 'user-id', passwordHash: 'hash-simulado' };
+      },
+    },
+    technician: {
+      create: async () => {
+        calls.push('technician.create');
+        throw databaseError;
+      },
+    },
+  };
+
+  const prisma = {
+    $transaction: async (callback) => {
+      calls.push('transaction.begin');
+
+      try {
+        const result = await callback(tx);
+        calls.push('transaction.commit');
+        return result;
+      } catch (error) {
+        calls.push('transaction.rollback');
+        throw error;
+      }
+    },
+  };
+
+  await assert.rejects(
+    registerUser(input, {
+      prisma,
+      hashPassword: async () => 'hash-simulado',
+    }),
+    (error) => {
+      assert.equal(error, databaseError);
+      return true;
+    },
+  );
+
+  assert.deepEqual(calls, [
+    'transaction.begin',
+    'user.create',
+    'technician.create',
+    'transaction.rollback',
+  ]);
+
+  assert.equal(calls.includes('transaction.commit'), false);
+});
