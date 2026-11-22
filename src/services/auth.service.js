@@ -1,4 +1,7 @@
-const { validateRegistration } = require('../validators/auth.validator');
+const { validateRegistration, validateLogin } = require('../validators/auth.validator');
+
+// The dummy hash uses the same bcrypt cost as public registration.
+const DUMMY_PASSWORD_HASH = '$2b$10$6S57Im9Ew3cqk98q9x/0q.ty850o588rUMoGbcvePu2M9TgLFMXAe';
 
 async function registerUser(input, { prisma, hashPassword }) {
   validateRegistration(input);
@@ -83,4 +86,37 @@ async function registerUser(input, { prisma, hashPassword }) {
   };
 }
 
-module.exports = { registerUser };
+async function loginUser(input, { prisma, comparePassword, signToken, now = () => new Date() }) {
+  validateLogin(input);
+  const user = await prisma.user.findFirst({
+    where: { email: { equals: input.email, mode: 'insensitive' } },
+    select: {
+      id: true, name: true, email: true, passwordHash: true, role: true,
+      accountStatus: true, lastLoginAt: true, isTestUser: true,
+      technician: { select: { id: true, approvalStatus: true } },
+    },
+  });
+  const passwordMatches = await comparePassword(input.password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
+  if (!user || !passwordMatches) {
+    const error = new Error('El email o la contraseña son incorrectos.');
+    error.status = 401;
+    error.type = '/problems/invalid-credentials';
+    throw error;
+  }
+  if (user.accountStatus !== 'ACTIVE') {
+    const error = new Error('Tu cuenta está suspendida. Contactá al equipo de UrbanFix.');
+    error.status = 403;
+    error.type = '/problems/account-suspended';
+    throw error;
+  }
+  const identity = {
+    id: user.id, name: user.name, email: user.email, role: user.role,
+    accountStatus: user.accountStatus, technician: user.technician,
+    lastLoginAt: user.lastLoginAt, isTestUser: user.isTestUser,
+  };
+  const accessToken = await signToken({ userId: user.id, role: user.role });
+  await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: now() } });
+  return { accessToken, tokenType: 'Bearer', expiresIn: 3600, user: identity };
+}
+
+module.exports = { registerUser, loginUser };

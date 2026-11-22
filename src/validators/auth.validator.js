@@ -127,4 +127,31 @@ function validateRegistration(input) {
   }
 }
 
-module.exports = { validateRegistration };
+function validateLogin(input) {
+  const errors = [];
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    errors.push({ field: 'body', detail: 'El cuerpo debe ser un objeto JSON.' });
+  } else {
+    if (typeof input.email !== 'string' ||
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email) ||
+        input.email !== input.email.toLowerCase()) {
+      errors.push({ field: 'email', detail: 'El email debe ser válido y estar en minúsculas.' });
+    }
+    if (typeof input.password !== 'string' || !input.password.trim()) {
+      errors.push({ field: 'password', detail: 'La contraseña es obligatoria.' });
+    }
+    for (const field of Object.keys(input)) {
+      if (!['email', 'password'].includes(field)) {
+        errors.push({ field, detail: 'Campo no permitido.' });
+      }
+    }
+  }
+  if (errors.length) {
+    const error = validationError('Revisá los campos indicados.');
+    error.type = '/problems/validation-error';
+    error.errors = errors;
+    throw error;
+  }
+}
+
+module.exports = { validateRegistration, validateLogin };
