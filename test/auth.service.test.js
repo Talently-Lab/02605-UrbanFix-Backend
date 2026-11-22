@@ -3,6 +3,60 @@ const assert = require('node:assert/strict');
 
 const { registerUser } = require('../src/services/auth.service');
 
+test('registro con isTestUser no ejecuta hash ni persistencia para ningún rol público', async () => {
+  for (const role of ['CLIENT', 'TECHNICIAN']) {
+    const input = {
+      name: 'Cuenta de prueba', email: 'cuenta@example.com', password: '12345678', role,
+      ...(role === 'CLIENT' ? { phone: '+5491123456789' } : {
+        specialties: [{ category: 'PLUMBING' }],
+        neighborhoodIds: ['550e8400-e29b-41d4-a716-446655440000'],
+      }),
+    };
+    for (const isTestUser of [true, false, null, 'true', 1]) {
+      const calls = [];
+      const prisma = {
+        user: { create: async () => { calls.push('user.create'); } },
+        technician: { create: async () => { calls.push('technician.create'); } },
+        $transaction: async () => { calls.push('transaction'); },
+      };
+      await assert.rejects(registerUser({ ...input, isTestUser }, {
+        prisma,
+        hashPassword: async () => { calls.push('hash'); return 'hash-simulado'; },
+      }), error => error.status === 400 && error.message === 'Campo no permitido: isTestUser');
+      assert.deepEqual(calls, []);
+    }
+  }
+});
+
+test('teléfono rechazado impide persistencia en CLIENT y TECHNICIAN', async () => {
+  for (const role of ['CLIENT', 'TECHNICIAN']) {
+    const base = {
+      name: 'Cuenta de prueba', email: 'cuenta@example.com', password: '12345678', role,
+      ...(role === 'TECHNICIAN' ? {
+        specialties: [{ category: 'PLUMBING' }],
+        neighborhoodIds: ['550e8400-e29b-41d4-a716-446655440000'],
+      } : {}),
+    };
+    const invalidInputs = role === 'CLIENT'
+      ? [base, ...[null, '', '+1', '+012', '+1234567890123456', '+54 91123456789']
+        .map(phone => ({ ...base, phone }))]
+      : ['+5491123456789', null, ''].map(phone => ({ ...base, phone }));
+    for (const input of invalidInputs) {
+      const calls = [];
+      const prisma = {
+        user: { create: async () => { calls.push('user.create'); } },
+        technician: { create: async () => { calls.push('technician.create'); } },
+        $transaction: async () => { calls.push('transaction'); },
+      };
+      await assert.rejects(registerUser(input, {
+        prisma,
+        hashPassword: async () => { calls.push('hash'); return 'hash-simulado'; },
+      }), error => error.status === 400);
+      assert.deepEqual(calls, []);
+    }
+  }
+});
+
 test('registra un CLIENT con contraseña hasheada y respuesta segura', async () => {
   const input = {
     name: 'Cliente de prueba',

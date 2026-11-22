@@ -83,7 +83,7 @@ test('rechaza el registro público de ADMIN', () => {
   );
 });
 
-test('valida el teléfono según el rol', () => {
+test('CLIENT exige teléfono internacional y acepta los límites de 2 y 15 dígitos', () => {
   const client = {
     name: 'Cliente',
     email: 'cliente@example.com',
@@ -96,18 +96,59 @@ test('valida el teléfono según el rol', () => {
     (error) => error.status === 400,
   );
 
+  for (const phone of ['+12', '+123456789012345', '+5491123456789']) {
+    assert.doesNotThrow(() => validateRegistration({ ...client, phone }));
+  }
+
+  for (const phone of [null, 12345678, false, {}, [], '', ' ', '+', '+1',
+    '+1234567890123456', '+012', '12345678', '005491123456789',
+    '+54 91123456789', '+54-91123456789', '+54(911)23456789',
+    ' +5491123456789', '+5491123456789 ', '+5491123456789\n',
+    '+54abc', '++5491123456789', '+１２']) {
+    assert.throws(
+      () => validateRegistration({ ...client, phone }),
+      error => error.status === 400,
+      `Debe rechazar teléfono ${JSON.stringify(phone)}`,
+    );
+  }
+});
+
+test('TECHNICIAN rechaza phone incluso si es null y admite omitirlo', () => {
   const technician = {
     name: 'Técnico',
     email: 'tecnico@example.com',
     password: '12345678',
     role: 'TECHNICIAN',
-    phone: '+5491123456789',
+    specialties: [{ category: 'PLUMBING' }],
+    neighborhoodIds: ['550e8400-e29b-41d4-a716-446655440000'],
   };
 
-  assert.throws(
-    () => validateRegistration(technician),
-    (error) => error.status === 400,
-  );
+  assert.doesNotThrow(() => validateRegistration(technician));
+  for (const phone of ['+5491123456789', null, '', 12345678]) {
+    assert.throws(
+      () => validateRegistration({ ...technician, phone }),
+      error => error.status === 400 && error.message === 'Campo no permitido: phone',
+    );
+  }
+});
+
+test('registro público rechaza isTestUser para CLIENT y TECHNICIAN cualquiera sea su valor', () => {
+  for (const role of ['CLIENT', 'TECHNICIAN']) {
+    const input = {
+      name: 'Cuenta de prueba', email: 'cuenta@example.com', password: '12345678', role,
+      ...(role === 'CLIENT' ? { phone: '+5491123456789' } : {
+        specialties: [{ category: 'PLUMBING' }],
+        neighborhoodIds: ['550e8400-e29b-41d4-a716-446655440000'],
+      }),
+    };
+    assert.doesNotThrow(() => validateRegistration(input));
+    for (const isTestUser of [true, false, null, 'true', 1]) {
+      assert.throws(
+        () => validateRegistration({ ...input, isTestUser }),
+        error => error.status === 400 && error.message === 'Campo no permitido: isTestUser',
+      );
+    }
+  }
 });
 
 test('rechaza un técnico sin especialidades', () => {
