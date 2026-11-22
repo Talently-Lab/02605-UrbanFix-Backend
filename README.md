@@ -110,3 +110,11 @@ Invoke-RestMethod -Uri http://localhost:3000/ -Method Get
 El comando realiza una petición GET y muestra la respuesta del servidor.
 
 Si devuelve el mensaje `UrbanFix API funcionando`, el servidor inicial responde correctamente.
+
+## Documentación
+
+- [Contrato de API](docs/api-contract.md)
+- [Guía de contribución](docs/CONTRIBUTING.md)
+- [Modelo de Datos](docs/data-model.md)
+- [Matriz RBAC](docs/rbac-matrix.md)
+- [Catálogo de reglas de negocio](https://app.notion.com/p/UrbanFix-Cat-logo-de-Reglas-de-Negocio-40d21cf73aff80e1ad8fd06ce3c71d9e)
