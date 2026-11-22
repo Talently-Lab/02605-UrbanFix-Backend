@@ -55,15 +55,16 @@ enum ServiceOfferStatus {
 }
 
 model User {
-  id            String        @id @default(uuid()) @db.Uuid
-  name          String
-  email         String        @unique
-  phone         String?
-  passwordHash  String
-  role          UserRole
-  accountStatus AccountStatus @default(ACTIVE)
-  createdAt     DateTime      @default(now()) @db.Timestamptz(3)
-
+  id                String        @id @default(uuid()) @db.Uuid
+  name              String
+  email             String        @unique
+  phone             String?
+  passwordHash      String
+  role              UserRole
+  accountStatus     AccountStatus @default(ACTIVE)
+  lastLoginAt       DateTime?      @db.Timestamptz(3)
+  isTestUser        Boolean       @default(false)
+  createdAt         DateTime      @default(now()) @db.Timestamptz(3)
   technician        Technician?
   serviceRequests   ServiceRequest[] @relation("RequestClient")
   cancelledRequests ServiceRequest[] @relation("RequestCancelledBy")
