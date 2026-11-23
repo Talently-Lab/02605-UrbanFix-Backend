@@ -1,14 +1,11 @@
 const jwt = require('jsonwebtoken');
-const { randomUUID } = require('node:crypto');
+const { sendInternalProblem } = require('../lib/internal-problem');
 
-function internalProblem(res) {
-  const traceId = randomUUID();
-  try {
-    console.error(JSON.stringify({ level: 'ERROR', event: 'AUTHENTICATION_ERROR', traceId }));
-  } catch {}
-  return res.status(500).type('application/problem+json').json({
-    type: '/problems/internal-error', title: 'Error interno', status: 500,
-    detail: 'No pudimos completar la operación. Intentá nuevamente más tarde.', traceId,
+function internalProblem(req, res, startedAt, error, databaseOperation) {
+  const baseRoute = req.baseUrl?.toLowerCase();
+  const route = ['/api/admin', '/api/solicitudes'].includes(baseRoute) ? baseRoute : req.route?.path ?? '/';
+  return sendInternalProblem(res, error, {
+    method: req.method, route, startedAt, event: 'AUTHENTICATION_ERROR', databaseOperation,
   });
 }
 
@@ -29,7 +26,10 @@ function authenticationProblem(res, type) {
 
 function authenticate({ prisma, jwtSecret }) {
   return async function authenticateRequest(req, res, next) {
-    if (typeof jwtSecret !== 'string' || !jwtSecret.trim()) return internalProblem(res);
+    const startedAt = performance.now();
+    if (typeof jwtSecret !== 'string' || !jwtSecret.trim()) {
+      return internalProblem(req, res, startedAt, new Error('JWT configuration missing'));
+    }
     const header = req.headers.authorization;
     if (header === undefined) return authenticationProblem(res, 'authentication-required');
     const bearer = typeof header === 'string' && /^Bearer +([^\s]+)$/i.exec(header);
@@ -56,8 +56,8 @@ function authenticate({ prisma, jwtSecret }) {
           technician: { select: { id: true, approvalStatus: true } },
         },
       });
-    } catch {
-      return internalProblem(res);
+    } catch (error) {
+      return internalProblem(req, res, startedAt, error, { modelName: 'User', operation: 'findUnique' });
     }
     if (!user) return authenticationProblem(res, 'invalid-token');
     if (user.accountStatus !== 'ACTIVE') {
