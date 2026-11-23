@@ -1,33 +1,39 @@
-function validationError(message) {
+function validationError(message, field, detail = message) {
   const error = new Error(message);
   error.status = 400;
+  if (field !== undefined) {
+    error.type = '/problems/validation-error';
+    error.errors = [{ field, detail }];
+  }
   return error;
 }
 
 function validateRegistration(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
-    throw validationError('Datos de registro inválidos');
+    throw validationError('Datos de registro inválidos', 'body');
   }
 
   for (const field of ['name', 'email', 'password', 'role']) {
     if (typeof input[field] !== 'string' || !input[field].trim()) {
-      throw validationError(`El campo ${field} es obligatorio`);
+      throw validationError(`El campo ${field} es obligatorio`, field);
     }
   }
 
   if (input.password.length < 8) {
-    throw validationError('La contraseña debe tener al menos 8 caracteres');
+    throw validationError('La contraseña debe tener al menos 8 caracteres', 'password');
   }
 
   if (
     !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email) ||
     input.email !== input.email.toLowerCase()
   ) {
-    throw validationError('Email inválido o con mayúsculas');
+    throw validationError('Email inválido o con mayúsculas', 'email',
+      input.email !== input.email.toLowerCase()
+        ? 'El email debe enviarse únicamente en minúsculas.' : 'El formato de email es inválido.');
   }
 
   if (!['CLIENT', 'TECHNICIAN'].includes(input.role)) {
-    throw validationError('Rol no permitido para registro público');
+    throw validationError('Rol no permitido para registro público', 'role');
   }
 
   const allowedFields =
@@ -37,7 +43,7 @@ function validateRegistration(input) {
 
   for (const field of Object.keys(input)) {
     if (!allowedFields.includes(field)) {
-      throw validationError(`Campo no permitido: ${field}`);
+      throw validationError(`Campo no permitido: ${field}`, field, 'Campo no permitido.');
     }
   }
 
@@ -46,7 +52,7 @@ function validateRegistration(input) {
       typeof input.phone !== 'string' ||
       !/^\+[1-9][0-9]{1,14}$/.test(input.phone)
     ) {
-      throw validationError('Teléfono internacional obligatorio');
+      throw validationError('Teléfono internacional obligatorio', 'phone');
     }
   }
 
@@ -60,28 +66,29 @@ function validateRegistration(input) {
     ];
 
     if (!Array.isArray(input.specialties) || input.specialties.length === 0) {
-      throw validationError('Debe indicar al menos una especialidad');
+      throw validationError('Debe indicar al menos una especialidad', 'specialties');
     }
 
     const categories = new Set();
 
-    for (const item of input.specialties) {
+    for (const [index, item] of input.specialties.entries()) {
+      const path = `specialties[${index}]`;
       if (!item || typeof item !== 'object' || Array.isArray(item)) {
-        throw validationError('Especialidad inválida');
+        throw validationError('Especialidad inválida', path);
       }
 
       for (const field of Object.keys(item)) {
         if (!['category', 'licenseNumber'].includes(field)) {
-          throw validationError(`Campo no permitido en especialidad: ${field}`);
+          throw validationError(`Campo no permitido en especialidad: ${field}`, `${path}.${field}`, 'Campo no permitido.');
         }
       }
 
       if (!validSpecialties.includes(item.category)) {
-        throw validationError('Especialidad inválida');
+        throw validationError('Especialidad inválida', `${path}.category`);
       }
 
       if (categories.has(item.category)) {
-        throw validationError('Especialidad duplicada');
+        throw validationError('Especialidad duplicada', `${path}.category`);
       }
 
       categories.add(item.category);
@@ -91,13 +98,13 @@ function validateRegistration(input) {
           typeof item.licenseNumber !== 'string' ||
           !item.licenseNumber.trim()
         ) {
-          throw validationError('La especialidad requiere matrícula');
+          throw validationError('La especialidad requiere matrícula', `${path}.licenseNumber`);
         }
       } else if (
         item.licenseNumber !== undefined &&
         (typeof item.licenseNumber !== 'string' || !item.licenseNumber.trim())
       ) {
-        throw validationError('Matrícula inválida');
+        throw validationError('Matrícula inválida', `${path}.licenseNumber`);
       }
     }
 
@@ -105,7 +112,7 @@ function validateRegistration(input) {
       !Array.isArray(input.neighborhoodIds) ||
       input.neighborhoodIds.length === 0
     ) {
-      throw validationError('Debe indicar al menos un barrio');
+      throw validationError('Debe indicar al menos un barrio', 'neighborhoodIds');
     }
 
     const uuidPattern =
@@ -113,13 +120,13 @@ function validateRegistration(input) {
 
     const neighborhoods = new Set();
 
-    for (const id of input.neighborhoodIds) {
+    for (const [index, id] of input.neighborhoodIds.entries()) {
       if (typeof id !== 'string' || !uuidPattern.test(id)) {
-        throw validationError('Identificador de barrio inválido');
+        throw validationError('Identificador de barrio inválido', `neighborhoodIds[${index}]`);
       }
 
       if (neighborhoods.has(id.toLowerCase())) {
-        throw validationError('Barrio duplicado');
+        throw validationError('Barrio duplicado', `neighborhoodIds[${index}]`);
       }
 
       neighborhoods.add(id.toLowerCase());

@@ -173,7 +173,7 @@ test('rechaza un técnico sin barrios de cobertura', () => {
     email: 'tecnico@example.com',
     password: '12345678',
     role: 'TECHNICIAN',
-    specialties: [{ specialty: 'PLUMBING' }],
+    specialties: [{ category: 'PLUMBING' }],
     neighborhoodIds: [],
   };
 
@@ -184,13 +184,13 @@ test('rechaza un técnico sin barrios de cobertura', () => {
 });
 
 test('exige matrícula para especialidades reguladas', () => {
-  for (const specialty of ['GAS', 'ELECTRICITY']) {
+  for (const category of ['GAS', 'ELECTRICITY']) {
     const input = {
       name: 'Técnico de prueba',
       email: 'tecnico@example.com',
       password: '12345678',
       role: 'TECHNICIAN',
-      specialties: [{ specialty }],
+      specialties: [{ category }],
       neighborhoodIds: ['550e8400-e29b-41d4-a716-446655440000'],
     };
 
@@ -207,7 +207,7 @@ test('rechaza especialidades duplicadas', () => {
     email: 'tecnico@example.com',
     password: '12345678',
     role: 'TECHNICIAN',
-    specialties: [{ specialty: 'PLUMBING' }, { specialty: 'PLUMBING' }],
+    specialties: [{ category: 'PLUMBING' }, { category: 'PLUMBING' }],
     neighborhoodIds: ['550e8400-e29b-41d4-a716-446655440000'],
   };
 
@@ -223,7 +223,7 @@ test('rechaza barrios duplicados o identificadores inválidos', () => {
     email: 'tecnico@example.com',
     password: '12345678',
     role: 'TECHNICIAN',
-    specialties: [{ specialty: 'PLUMBING' }],
+    specialties: [{ category: 'PLUMBING' }],
   };
 
   const id = '550e8400-e29b-41d4-a716-446655440000';
