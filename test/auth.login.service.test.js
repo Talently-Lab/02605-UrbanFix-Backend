@@ -112,3 +112,16 @@ test('entrada inválida no consulta Prisma; fallas de firma o persistencia no de
   deps.prisma.user.update = async () => { throw new Error('write failure'); };
   await assert.rejects(loginUser(input, deps), /write failure/);
 });
+
+test('el diagnóstico conserva el error original de Prisma y sus metadatos', async () => {
+  const { deps } = await fixture();
+  const meta = Object.freeze({ modelName: 'User' });
+  const original = Object.freeze(Object.assign(new Error('write failure'), { code: 'P2025', meta }));
+  const databaseDiagnostics = new Map();
+  deps.prisma.user.update = async () => { throw original; };
+
+  await assert.rejects(loginUser(input, { ...deps, databaseDiagnostics }), error => error === original);
+  assert.equal(original.meta, meta);
+  assert.equal(original.code, 'P2025');
+  assert.deepEqual(databaseDiagnostics.get(original), { modelName: 'User', operation: 'update' });
+});

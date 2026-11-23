@@ -3,7 +3,16 @@ const { validateRegistration, validateLogin } = require('../validators/auth.vali
 // The dummy hash uses the same bcrypt cost as public registration.
 const DUMMY_PASSWORD_HASH = '$2b$10$6S57Im9Ew3cqk98q9x/0q.ty850o588rUMoGbcvePu2M9TgLFMXAe';
 
-async function registerUser(input, { prisma, hashPassword }) {
+async function runPrismaQuery(databaseDiagnostics, modelName, operation, delegate, args) {
+  try {
+    return await delegate[operation](args);
+  } catch (error) {
+    databaseDiagnostics?.set(error, { modelName, operation });
+    throw error;
+  }
+}
+
+async function registerUser(input, { prisma, hashPassword, databaseDiagnostics }) {
   validateRegistration(input);
 
   const passwordHash = await hashPassword(input.password);
@@ -12,7 +21,7 @@ async function registerUser(input, { prisma, hashPassword }) {
 
   try {
     if (input.role === 'CLIENT') {
-      user = await prisma.user.create({
+      user = await runPrismaQuery(databaseDiagnostics, 'User', 'create', prisma.user, {
         data: {
           name: input.name,
           email: input.email,
@@ -23,7 +32,7 @@ async function registerUser(input, { prisma, hashPassword }) {
       });
     } else {
       user = await prisma.$transaction(async (tx) => {
-        const createdUser = await tx.user.create({
+        const createdUser = await runPrismaQuery(databaseDiagnostics, 'User', 'create', tx.user, {
           data: {
             name: input.name,
             email: input.email,
@@ -33,7 +42,7 @@ async function registerUser(input, { prisma, hashPassword }) {
           },
         });
 
-        await tx.technician.create({
+        const technician = await runPrismaQuery(databaseDiagnostics, 'Technician', 'create', tx.technician, {
           data: {
             userId: createdUser.id,
             approvalStatus: 'PENDING',
@@ -53,25 +62,36 @@ async function registerUser(input, { prisma, hashPassword }) {
           },
         });
 
-        return createdUser;
+        return { ...createdUser, technician };
       });
     }
   } catch (error) {
     const target = error.meta?.target;
     const constraintIndex =
       error.meta?.driverAdapterError?.cause?.constraint?.index;
+    const emailIndexes = ['User_email_key', 'User_email_case_insensitive'];
 
     const isEmailConflict =
       error.code === 'P2002' &&
-      (target === 'User_email_case_insensitive' ||
+      (emailIndexes.includes(target) ||
         target === 'email' ||
         (Array.isArray(target) && target.includes('email')) ||
-        constraintIndex === 'User_email_case_insensitive');
+        emailIndexes.includes(constraintIndex));
 
     if (isEmailConflict) {
       const conflict = new Error('El email ya está registrado');
       conflict.status = 409;
+      conflict.type = '/problems/email-already-registered';
       throw conflict;
+    }
+
+    if (input.role === 'TECHNICIAN' && error.code === 'P2003' &&
+        error.meta?.modelName === 'Technician' &&
+        constraintIndex === 'TechnicianNeighborhood_neighborhoodId_fkey') {
+      const notFound = new Error('El recurso solicitado no está disponible.');
+      notFound.status = 404;
+      notFound.type = '/problems/not-found';
+      throw notFound;
     }
 
     throw error;
@@ -82,13 +102,19 @@ async function registerUser(input, { prisma, hashPassword }) {
     name: user.name,
     email: user.email,
     role: user.role,
-    technician: null,
+    accountStatus: user.accountStatus,
+    technician: user.technician ? {
+      id: user.technician.id,
+      approvalStatus: user.technician.approvalStatus,
+    } : null,
+    lastLoginAt: user.lastLoginAt,
+    isTestUser: user.isTestUser,
   };
 }
 
-async function loginUser(input, { prisma, comparePassword, signToken, now = () => new Date() }) {
+async function loginUser(input, { prisma, comparePassword, signToken, now = () => new Date(), databaseDiagnostics }) {
   validateLogin(input);
-  const user = await prisma.user.findFirst({
+  const user = await runPrismaQuery(databaseDiagnostics, 'User', 'findFirst', prisma.user, {
     where: { email: { equals: input.email, mode: 'insensitive' } },
     select: {
       id: true, name: true, email: true, passwordHash: true, role: true,
@@ -115,7 +141,9 @@ async function loginUser(input, { prisma, comparePassword, signToken, now = () =
     lastLoginAt: user.lastLoginAt, isTestUser: user.isTestUser,
   };
   const accessToken = await signToken({ userId: user.id, role: user.role });
-  await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: now() } });
+  await runPrismaQuery(databaseDiagnostics, 'User', 'update', prisma.user, {
+    where: { id: user.id }, data: { lastLoginAt: now() },
+  });
   return { accessToken, tokenType: 'Bearer', expiresIn: 3600, user: identity };
 }
 

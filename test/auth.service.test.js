@@ -78,6 +78,9 @@ test('registra un CLIENT con contraseña hasheada y respuesta segura', async () 
         return {
           id: 'user-123',
           ...data,
+          accountStatus: 'ACTIVE',
+          lastLoginAt: null,
+          isTestUser: false,
         };
       },
     },
@@ -98,9 +101,10 @@ test('registra un CLIENT con contraseña hasheada y respuesta segura', async () 
   assert.equal(savedData.email, input.email);
   assert.equal(savedData.role, 'CLIENT');
 
-  assert.equal(result.id, 'user-123');
-  assert.equal(result.email, input.email);
-  assert.equal(result.role, 'CLIENT');
+  assert.deepEqual(result, {
+    id: 'user-123', name: input.name, email: input.email, role: 'CLIENT',
+    accountStatus: 'ACTIVE', technician: null, lastLoginAt: null, isTestUser: false,
+  });
 
   assert.equal(
     Object.hasOwn(result, 'passwordHash'),
@@ -180,48 +184,65 @@ test('no confunde otras restricciones únicas con un email duplicado', async () 
   );
 });
 
-test('devuelve 409 cuando Prisma identifica el índice de email en driverAdapterError', async () => {
-  const input = {
-    name: 'Cliente de prueba',
-    email: 'cliente@example.com',
-    password: '12345678',
-    role: 'CLIENT',
-    phone: '+5491123456789',
-  };
+for (const index of ['User_email_case_insensitive', 'User_email_key']) {
+  test(`devuelve 409 para driverAdapterError con índice ${index}`, async () => {
+    const input = {
+      name: 'Cliente de prueba',
+      email: 'cliente@example.com',
+      password: '12345678',
+      role: 'CLIENT',
+      phone: '+5491123456789',
+    };
 
-  const prismaError = new Error('Unique constraint failed');
-  prismaError.code = 'P2002';
-  prismaError.meta = {
-    modelName: 'User',
-    driverAdapterError: {
-      cause: {
-        kind: 'UniqueConstraintViolation',
-        constraint: {
-          index: 'User_email_case_insensitive',
+    const prismaError = new Error('Unique constraint failed');
+    prismaError.code = 'P2002';
+    prismaError.meta = {
+      modelName: 'User',
+      driverAdapterError: {
+        cause: {
+          kind: 'UniqueConstraintViolation',
+          constraint: {
+            index,
+          },
         },
       },
-    },
-  };
+    };
 
-  const prisma = {
-    user: {
-      create: async () => {
-        throw prismaError;
+    const prisma = {
+      user: {
+        create: async () => {
+          throw prismaError;
+        },
       },
-    },
-  };
+    };
 
-  await assert.rejects(
-    registerUser(input, {
-      prisma,
-      hashPassword: async () => 'hash-simulado',
-    }),
-    (error) => {
-      assert.equal(error.status, 409);
-      assert.equal(error.message, 'El email ya está registrado');
-      return true;
-    },
-  );
+    await assert.rejects(
+      registerUser(input, {
+        prisma,
+        hashPassword: async () => 'hash-simulado',
+      }),
+      (error) => {
+        assert.equal(error.status, 409);
+        assert.equal(error.message, 'El email ya está registrado');
+        return true;
+      },
+    );
+  });
+}
+
+test('propaga índices ajenos al email y errores distintos de P2002 del adapter', async () => {
+  const input = {
+    name: 'Cliente de prueba', email: 'cliente@example.com', password: '12345678',
+    role: 'CLIENT', phone: '+5491123456789',
+  };
+  for (const [code, index] of [['P2002', 'User_pkey'], ['P2003', 'User_email_key']]) {
+    const original = Object.assign(new Error('Database error'), {
+      code, meta: { driverAdapterError: { cause: { constraint: { index } } } },
+    });
+    const prisma = { user: { create: async () => { throw original; } } };
+    await assert.rejects(registerUser(input, { prisma, hashPassword: async () => 'hash-simulado' }),
+      error => error === original);
+  }
 });
 
 test('registra un TECHNICIAN con especialidades y barrios dentro de una transacción', async () => {
@@ -248,6 +269,9 @@ test('registra un TECHNICIAN con especialidades y barrios dentro de una transacc
         return {
           id: userId,
           ...data,
+          accountStatus: 'ACTIVE',
+          lastLoginAt: null,
+          isTestUser: false,
         };
       },
     },
@@ -303,8 +327,11 @@ test('registra un TECHNICIAN con especialidades y barrios dentro de una transacc
     create: [{ neighborhoodId: input.neighborhoodIds[0] }],
   });
 
-  assert.equal(result.id, userId);
-  assert.equal(result.passwordHash, undefined);
+  assert.deepEqual(result, {
+    id: userId, name: input.name, email: input.email, role: 'TECHNICIAN',
+    accountStatus: 'ACTIVE', technician: { id: 'technician-id', approvalStatus: 'PENDING' },
+    lastLoginAt: null, isTestUser: false,
+  });
 });
 
 test('no confirma un registro parcial si falla la creación del técnico', async () => {
@@ -369,4 +396,43 @@ test('no confirma un registro parcial si falla la creación del técnico', async
   ]);
 
   assert.equal(calls.includes('transaction.commit'), false);
+});
+
+test('traduce solo la FK de barrio del técnico después de que la transacción rechaza', async () => {
+  const input = {
+    name: 'Técnico de prueba', email: 'tecnico@example.com', password: '12345678',
+    role: 'TECHNICIAN', specialties: [{ category: 'PLUMBING' }],
+    neighborhoodIds: ['11111111-1111-4111-8111-111111111111'],
+  };
+  for (const [modelName, index, matches] of [
+    ['Technician', 'TechnicianNeighborhood_neighborhoodId_fkey', true],
+    ['Technician', 'TechnicianNeighborhood_technicianId_fkey', false],
+    ['User', 'TechnicianNeighborhood_neighborhoodId_fkey', false],
+    ['Technician', undefined, false],
+  ]) {
+    const original = Object.assign(new Error('Detalle interno de la FK'), {
+      code: 'P2003', meta: { modelName, driverAdapterError: { cause: { constraint: { index } } } },
+    });
+    let rolledBack = false;
+    const tx = {
+      user: { create: async () => ({ id: 'test-user' }) },
+      technician: { create: async () => { throw original; } },
+    };
+    const prisma = { $transaction: async callback => {
+      try {
+        return await callback(tx);
+      } catch (error) {
+        assert.equal(error, original);
+        rolledBack = true;
+        throw error;
+      }
+    } };
+    await assert.rejects(registerUser(input, { prisma, hashPassword: async () => 'hash-simulado' }), error => {
+      assert.equal(rolledBack, true);
+      if (!matches) return error === original;
+      assert.equal(error.status, 404);
+      assert.equal(error.type, '/problems/not-found');
+      return true;
+    });
+  }
 });
