@@ -39,7 +39,7 @@ function validateRegistration(input) {
   const allowedFields =
     input.role === 'CLIENT'
       ? ['name', 'email', 'password', 'role', 'phone']
-      : ['name', 'email', 'password', 'role', 'specialties', 'neighborhoodIds'];
+      : ['name', 'email', 'password', 'role', 'phone', 'specialties', 'neighborhoodIds'];
 
   for (const field of Object.keys(input)) {
     if (!allowedFields.includes(field)) {
@@ -47,13 +47,11 @@ function validateRegistration(input) {
     }
   }
 
-  if (input.role === 'CLIENT') {
-    if (
-      typeof input.phone !== 'string' ||
-      !/^\+[1-9][0-9]{1,14}$/.test(input.phone)
-    ) {
-      throw validationError('Teléfono internacional obligatorio', 'phone');
-    }
+  if (
+    typeof input.phone !== 'string' ||
+    !/^\+[1-9][0-9]{1,14}$/.test(input.phone)
+  ) {
+    throw validationError('Teléfono internacional obligatorio', 'phone');
   }
 
   if (input.role === 'TECHNICIAN') {

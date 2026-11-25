@@ -36,7 +36,7 @@ async function registerUser(input, { prisma, hashPassword, databaseDiagnostics }
           data: {
             name: input.name,
             email: input.email,
-            phone: null,
+            phone: input.phone,
             passwordHash,
             role: 'TECHNICIAN',
           },

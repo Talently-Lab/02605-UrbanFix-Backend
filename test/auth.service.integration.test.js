@@ -54,6 +54,7 @@ test('revierte el registro de TECHNICIAN si falla la relación con un barrio', {
       email,
       password: 'password123',
       role: 'TECHNICIAN',
+      phone: '+5491123456789',
       specialties: [{ category: 'PLUMBING' }],
       neighborhoodIds: [neighborhoodId],
     };
@@ -131,6 +132,7 @@ test('integración de registro, login y restricciones de PostgreSQL', {
     const input = {
       name: 'Integration TECHNICIAN', email: `s3-${randomUUID()}@example.test`, password,
       role: 'TECHNICIAN', specialties: [{ category: 'GAS', licenseNumber: 'S3-LICENSE' }, { category: 'PLUMBING' }],
+      phone: '+5491123456789',
       neighborhoodIds: [neighborhood.id],
     };
     const result = await registerUser(input, registration);
@@ -138,7 +140,7 @@ test('integración de registro, login y restricciones de PostgreSQL', {
       where: { id: result.id },
       include: { technician: { include: { specialties: true, neighborhoods: true } } },
     });
-    assert.equal(saved.phone, null);
+    assert.equal(saved.phone, input.phone);
     assert.equal(saved.accountStatus, 'ACTIVE');
     assert.equal(saved.lastLoginAt, null);
     assert.equal(saved.isTestUser, false);
@@ -255,7 +257,7 @@ test('integración de registro, login y restricciones de PostgreSQL', {
     }), 1);
   });
 
-  await t.test('CHECK PostgreSQL exige teléfono de CLIENT y null para TECHNICIAN y ADMIN', async () => {
+  await t.test('CHECK PostgreSQL exige teléfono de CLIENT y TECHNICIAN y null para ADMIN', async () => {
     const { Client } = require('pg');
     const connection = new Client({ connectionString: validateIntegrationUrl(process.env.DATABASE_URL) });
     try {
@@ -264,16 +266,18 @@ test('integración de registro, login y restricciones de PostgreSQL', {
         text: 'INSERT INTO "User" ("id", "name", "email", "passwordHash", "role", "phone") VALUES ($1::uuid, $2, $3, $4, $5::"UserRole", $6)',
         values: [randomUUID(), 'S3 CHECK fixture', `s3-${randomUUID()}@example.test`, 'fixture-hash', role, phone],
       });
-      for (const phone of [null, '', '   ']) {
-        await assert.rejects(insert('CLIENT', phone),
+      for (const role of ['CLIENT', 'TECHNICIAN']) {
+        for (const phone of [null, '', '   ']) {
+          await assert.rejects(insert(role, phone),
+            error => error.code === '23514' && error.constraint === 'User_phone_by_role');
+        }
+        assert.equal((await insert(role, '+5491123456789')).rowCount, 1);
+      }
+      for (const phone of ['', '   ', '+5491123456789']) {
+        await assert.rejects(insert('ADMIN', phone),
           error => error.code === '23514' && error.constraint === 'User_phone_by_role');
       }
-      for (const role of ['TECHNICIAN', 'ADMIN']) {
-        await assert.rejects(insert(role, '+5491123456789'),
-          error => error.code === '23514' && error.constraint === 'User_phone_by_role');
-        assert.equal((await insert(role, null)).rowCount, 1);
-      }
-      assert.equal((await insert('CLIENT', '+5491123456789')).rowCount, 1);
+      assert.equal((await insert('ADMIN', null)).rowCount, 1);
     } finally {
       await connection.end();
     }

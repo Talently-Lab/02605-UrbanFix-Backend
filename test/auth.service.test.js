@@ -7,7 +7,8 @@ test('registro con isTestUser no ejecuta hash ni persistencia para ningún rol p
   for (const role of ['CLIENT', 'TECHNICIAN']) {
     const input = {
       name: 'Cuenta de prueba', email: 'cuenta@example.com', password: '12345678', role,
-      ...(role === 'CLIENT' ? { phone: '+5491123456789' } : {
+      phone: '+5491123456789',
+      ...(role === 'TECHNICIAN' && {
         specialties: [{ category: 'PLUMBING' }],
         neighborhoodIds: ['550e8400-e29b-41d4-a716-446655440000'],
       }),
@@ -37,10 +38,8 @@ test('teléfono rechazado impide persistencia en CLIENT y TECHNICIAN', async () 
         neighborhoodIds: ['550e8400-e29b-41d4-a716-446655440000'],
       } : {}),
     };
-    const invalidInputs = role === 'CLIENT'
-      ? [base, ...[null, '', '+1', '+012', '+1234567890123456', '+54 91123456789']
-        .map(phone => ({ ...base, phone }))]
-      : ['+5491123456789', null, ''].map(phone => ({ ...base, phone }));
+    const invalidInputs = [base, ...[null, '', ' ', 12345678, '+1', '+012', '+1234567890123456', '+54 91123456789']
+      .map(phone => ({ ...base, phone }))];
     for (const input of invalidInputs) {
       const calls = [];
       const prisma = {
@@ -51,7 +50,8 @@ test('teléfono rechazado impide persistencia en CLIENT y TECHNICIAN', async () 
       await assert.rejects(registerUser(input, {
         prisma,
         hashPassword: async () => { calls.push('hash'); return 'hash-simulado'; },
-      }), error => error.status === 400);
+      }), error => error.status === 400 && error.type === '/problems/validation-error' &&
+        error.errors[0].field === 'phone');
       assert.deepEqual(calls, []);
     }
   }
@@ -100,6 +100,7 @@ test('registra un CLIENT con contraseña hasheada y respuesta segura', async () 
   assert.notEqual(savedData.passwordHash, input.password);
   assert.equal(savedData.email, input.email);
   assert.equal(savedData.role, 'CLIENT');
+  assert.equal(savedData.phone, input.phone);
 
   assert.deepEqual(result, {
     id: 'user-123', name: input.name, email: input.email, role: 'CLIENT',
@@ -251,6 +252,7 @@ test('registra un TECHNICIAN con especialidades y barrios dentro de una transacc
     email: 'tecnico@example.com',
     password: '12345678',
     role: 'TECHNICIAN',
+    phone: '+5491123456789',
     specialties: [
       { category: 'PLUMBING' },
       { category: 'GAS', licenseNumber: 'MAT-123' },
@@ -311,7 +313,7 @@ test('registra un TECHNICIAN con especialidades y barrios dentro de una transacc
   assert.equal(calls[1].data.email, input.email);
   assert.equal(calls[1].data.passwordHash, 'hash-simulado');
   assert.equal(calls[1].data.role, 'TECHNICIAN');
-  assert.equal(calls[1].data.phone, null);
+  assert.equal(calls[1].data.phone, input.phone);
 
   assert.equal(calls[2].data.userId, userId);
   assert.equal(calls[2].data.approvalStatus, 'PENDING');
@@ -340,6 +342,7 @@ test('no confirma un registro parcial si falla la creación del técnico', async
     email: 'tecnico@example.com',
     password: '12345678',
     role: 'TECHNICIAN',
+    phone: '+5491123456789',
     specialties: [{ category: 'PLUMBING' }],
     neighborhoodIds: ['11111111-1111-4111-8111-111111111111'],
   };
@@ -401,7 +404,7 @@ test('no confirma un registro parcial si falla la creación del técnico', async
 test('traduce solo la FK de barrio del técnico después de que la transacción rechaza', async () => {
   const input = {
     name: 'Técnico de prueba', email: 'tecnico@example.com', password: '12345678',
-    role: 'TECHNICIAN', specialties: [{ category: 'PLUMBING' }],
+    role: 'TECHNICIAN', phone: '+5491123456789', specialties: [{ category: 'PLUMBING' }],
     neighborhoodIds: ['11111111-1111-4111-8111-111111111111'],
   };
   for (const [modelName, index, matches] of [
