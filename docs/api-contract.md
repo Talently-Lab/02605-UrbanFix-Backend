@@ -356,6 +356,7 @@ No recibe body ni parámetros de query.
   "id": "00000000-0000-4000-8000-000000000002",
   "name": "Luis Gómez",
   "email": "luis@example.com",
+  "phone": "+5491122222222",
   "role": "TECHNICIAN",
   "accountStatus": "ACTIVE",
   "technician": {
@@ -372,6 +373,8 @@ id es UUID. name y email son strings. role es UserRole y accountStatus es Accoun
 technician contiene id, de tipo UUID, y approvalStatus, de tipo TechnicianApprovalStatus.
 
 Para CLIENT y ADMIN, technician es null.
+
+phone es un string o null y corresponde exclusivamente al usuario autenticado. CLIENT y TECHNICIAN consultan su propio teléfono; para ADMIN es null. Solo CLIENT puede editarlo.
 
 lastLoginAt es una Fecha o null. Representa la fecha y hora del último login exitoso registrado en la base de datos. Si la cuenta nunca inició sesión, devuelve null.
 
@@ -404,7 +407,25 @@ name es un string no vacío, como en el registro. phone conserva el formato inte
 
 **Respuesta exitosa: HTTP 200 OK**
 
-Devuelve los datos públicos actualizados del usuario, con la misma estructura y tipos de GET /api/usuarios/me. La respuesta excluye passwordHash.
+Devuelve los datos públicos actualizados del usuario, con la misma estructura y tipos de GET /api/usuarios/me, incluido phone como string o null. La respuesta excluye passwordHash.
+
+Ejemplo para CLIENT después de actualizar el nombre y el teléfono:
+
+```json
+{
+  "id": "00000000-0000-4000-8000-000000000001",
+  "name": "Ana Pérez",
+  "email": "ana@example.com",
+  "phone": "+5491100000000",
+  "role": "CLIENT",
+  "accountStatus": "ACTIVE",
+  "technician": null,
+  "lastLoginAt": null,
+  "isTestUser": false
+}
+```
+
+Para TECHNICIAN, la respuesta conserva el teléfono propio sin modificarlo. Para ADMIN, phone permanece null.
 
 **Errores de validación**
 
