@@ -38,7 +38,9 @@
 
 ## Campos
 
-phone pertenece a la cuenta CLIENT y la solicitud lo obtiene mediante su relación con User.
+phone pertenece a User y es obligatorio en el registro de CLIENT y TECHNICIAN; permanece nulo para ADMIN. La solicitud obtiene el teléfono del cliente mediante su relación con User y el del técnico mediante Technician.user.
+
+D-040. Todos los roles pueden editar su propio nombre mediante PATCH /api/usuarios/me. Solo CLIENT puede editar su teléfono. El teléfono del técnico no es editable en el MVP.
 
 preferredTime es informativo y utiliza ANY por defecto.
 
@@ -96,7 +98,11 @@ PENDING conserva technicianId nulo.
 
 ServiceOffer.technicianId identifica al destinatario.
 
-Backend asigna ServiceRequest.technicianId al aceptar y lo conserva tras finalizar o cancelar una solicitud ya aceptada.
+Como regla general, Backend asigna ServiceRequest.technicianId al aceptar una oferta y lo conserva tras finalizar o cancelar una solicitud ya aceptada. La excepción es D-041: al suspender al técnico con una solicitud ACCEPTED, esta vuelve a PENDING y technicianId queda en null.
+
+D-041. Al suspender al técnico de una solicitud ACCEPTED, la solicitud vuelve a PENDING y technicianId queda nulo. Si está IN_PROGRESS, Admin debe confirmar la cancelación. Esta regla corresponde a la suspensión y es independiente de la liberación de otras ofertas por aceptación de D-029.
+
+Queda pendiente definir el tratamiento de la oferta aceptada y de acceptedAt cuando D-041 devuelve la solicitud a PENDING, preservando el historial y los índices de unicidad existentes.
 
 Se almacenan instantes con timestamptz(3). El 3 indica tres decimales de segundo, la misma precisión que usa Date en JavaScript. PostgreSQL conserva el instante y la zona original queda fuera del dato almacenado.
 
@@ -138,13 +144,19 @@ El Cliente puede tener varias solicitudes activas sin un límite definido para e
 
 Guardar únicamente el hash de la contraseña en passwordHash. El valor no sale en respuestas.
 
-Guardar street, streetNumber, floor, apartment y directions por separado del barrio. Compartirlos únicamente con el técnico que aceptó. Guardar phone en User, obligatorio para CLIENT y nulo para TECHNICIAN y ADMIN.
+Guardar street, streetNumber, floor, apartment y directions por separado del barrio. D-043. El técnico asignado accede a la dirección exacta y al teléfono del cliente solo durante ACCEPTED e IN_PROGRESS; quedan excluidos en COMPLETED y CANCELLED. Guardar phone en User, obligatorio en el registro de CLIENT y TECHNICIAN y nulo para ADMIN.
+
+El teléfono técnico es visible para el CLIENT titular después de aceptar la solicitud. Esta visibilidad no modifica D-043, que regula el acceso del técnico a los datos del cliente.
 
 La dirección utiliza el formato estructurado del contrato. La API controla los campos que recibe cada rol.
 
 La matrícula se guarda por especialidad.
 
 Admin revisa perfiles manualmente y consulta todas las solicitudes; recibe el barrio y el email de moderación, excluyendo dirección exacta y teléfono (D-032 y D-033).
+
+El acceso de Admin a description y el tratamiento de su texto libre siguen pendientes de definición del PM; no se habilitan en este checkpoint.
+
+D-042. La reevaluación de perfiles técnicos y el cambio de una decisión de aprobación o rechazo ya emitida quedan fuera del MVP. Se conserva la evaluación inicial de perfiles PENDING.
 
 Aplicar permisos mínimos de base de datos y separar la cuenta de la aplicación de la cuenta de migraciones.
 
@@ -158,7 +170,7 @@ El diagnóstico interno solo conserva datos sanitizados.
 
 Descripción obligatoria de 20 a 500 caracteres. Calle y número obligatorios; el número admite S/N. Piso, departamento e indicaciones son opcionales. Las entradas opcionales omitidas se guardan como null; enviar null, texto vacío o espacios produce HTTP 400.
 
-El teléfono utiliza formato internacional con + y entre 2 y 15 dígitos, sin separadores y con el primer dígito distinto de cero. Solo CLIENT puede informar phone.
+El teléfono utiliza formato internacional con + y entre 2 y 15 dígitos, sin separadores y con el primer dígito distinto de cero. CLIENT y TECHNICIAN deben informar phone al registrarse; solo CLIENT puede editarlo posteriormente (D-040).
 
 El JWT dura 1 hora desde el login y devuelve expiresIn 3600.
 
@@ -210,12 +222,14 @@ CREATE UNIQUE INDEX "User_email_case_insensitive"
   ON "User" (lower("email"));
 
 ALTER TABLE "User" ADD CONSTRAINT "User_phone_by_role"
-  CHECK (("role" = 'CLIENT' AND "phone" IS NOT NULL
+  CHECK (("role" IN ('CLIENT', 'TECHNICIAN') AND "phone" IS NOT NULL
   AND length(trim("phone")) > 0)
-  OR ("role" IN ('TECHNICIAN', 'ADMIN') AND "phone" IS NULL));
+  OR ("role" = 'ADMIN' AND "phone" IS NULL));
 ```
 
 El índice de email garantiza unicidad sin distinguir mayúsculas, incluso ante registros simultáneos. Antes de implementar las restricciones se revisan posibles duplicados y registros anteriores. Este documento describe el SQL previsto; su aplicación requiere una migración autorizada.
+
+La restricción de teléfono documentada incorpora la decisión aprobada para TECHNICIAN. La migración existente aún exige null para ese rol; su adecuación y el tratamiento de cuentas técnicas existentes quedan pendientes de autorización, sin modificar Prisma ni migraciones en este checkpoint.
 
 ## Correspondencia con el embudo de adquisición
 

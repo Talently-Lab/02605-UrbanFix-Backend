@@ -11,6 +11,7 @@ Auth indica quién puede acceder. «No» significa acceso público. Las condicio
 | POST   | /api/auth/register                 | Registrar una cuenta Cliente o Técnico.                                        | No                 |
 | POST   | /api/auth/login                    | Autenticar una cuenta y obtener un JWT.                                        | No                 |
 | GET    | /api/usuarios/me                   | Consultar la identidad y el estado de la cuenta propia.                        | Cuenta autenticada |
+| PATCH  | /api/usuarios/me                   | Editar el nombre propio y, solo para CLIENT, el teléfono propio.               | Cuenta autenticada |
 | GET    | /api/especialidades                | Consultar especialidades y requisitos de matrícula.                            | No                 |
 | GET    | /api/barrios                       | Consultar el catálogo de barrios de CABA.                                      | No                 |
 | GET    | /api/tecnicos                      | Buscar técnicos aprobados y disponibles para el servicio y barrio.             | Cliente            |
@@ -134,9 +135,9 @@ ADMIN consulta todas las solicitudes. Puede cancelarlas en PENDING o ACCEPTED po
 
 ADMIN puede suspender y reactivar cuentas CLIENT y TECHNICIAN.
 
-La dirección exacta comprende calle, número, piso, departamento e indicaciones. Se comparte únicamente con el técnico que aceptó la solicitud.
+La dirección exacta comprende calle, número, piso, departamento e indicaciones. D-043. Se comparte con el técnico asignado únicamente durante ACCEPTED e IN_PROGRESS, junto con el teléfono del cliente. Ambos datos quedan excluidos de sus respuestas en COMPLETED y CANCELLED.
 
-El teléfono se almacena en User.phone. Es obligatorio para CLIENT y queda en null para TECHNICIAN y ADMIN. La solicitud accede a él mediante su relación con la cuenta del cliente.
+El teléfono se almacena en User.phone. Es obligatorio en el registro de CLIENT y TECHNICIAN y queda en null para ADMIN. Solo CLIENT puede editarlo; el teléfono técnico no es editable en el MVP. La solicitud accede al teléfono del cliente mediante su relación con User y al del técnico mediante Technician.user. El teléfono técnico es visible para el cliente titular después de aceptar la solicitud.
 
 ADMIN nunca recibe la dirección exacta ni el teléfono del cliente. El barrio es su único dato de ubicación. Para moderar utiliza el email de la cuenta.
 
@@ -230,6 +231,7 @@ Público. Registra una cuenta TECHNICIAN y su perfil. Devuelve HTTP 201.
   "email": "luis@example.com",
   "password": "EjemploSeguro123!",
   "role": "TECHNICIAN",
+  "phone": "+5491122222222",
   "specialties": [
     {
       "category": "ELECTRICITY",
@@ -240,7 +242,7 @@ Público. Registra una cuenta TECHNICIAN y su perfil. Devuelve HTTP 201.
 }
 ```
 
-name, email, password y role siguen los tipos del registro de Cliente. La política de email en minúsculas y unicidad se aplica también a TECHNICIAN. role debe ser TECHNICIAN. Esta variante no admite phone.
+name, email, password y role siguen los tipos del registro de Cliente. La política de email en minúsculas y unicidad se aplica también a TECHNICIAN. role debe ser TECHNICIAN. phone es obligatorio y utiliza el mismo formato internacional validado para CLIENT. El teléfono técnico no es editable en el MVP y se comparte con el cliente titular después de aceptar la solicitud.
 
 specialties es un array obligatorio con al menos una especialidad. category es ServiceCategory. Las categorías no pueden repetirse.
 
@@ -376,6 +378,56 @@ lastLoginAt es una Fecha o null. Representa la fecha y hora del último login ex
 isTestUser es un booleano que identifica si la cuenta corresponde a una cuenta de prueba.
 
 Backend obtiene la identidad del JWT y consulta el estado actual de la cuenta. La respuesta excluye passwordHash.
+
+### BLOQUE 5B — EDICIÓN DEL PERFIL PROPIO
+
+#### `PATCH /api/usuarios/me`
+
+**Actor y alcance**
+
+D-040. CLIENT, TECHNICIAN o ADMIN con sesión y cuenta activa pueden editar su propio name. Únicamente CLIENT puede editar su propio phone. La cuenta se identifica desde la sesión.
+
+**Body JSON**
+
+Ejemplo para CLIENT:
+
+```json
+{
+  "name": "Ana Pérez",
+  "phone": "+5491100000000"
+}
+```
+
+Para TECHNICIAN y ADMIN, el único campo editable es name. El teléfono del técnico se informa obligatoriamente al registrarse y no puede modificarse en el MVP.
+
+name es un string no vacío, como en el registro. phone conserva el formato internacional del registro de CLIENT. La edición es parcial: los campos omitidos conservan su valor. No se admiten cambios de email, password, role, accountStatus, aprobación, especialidades, barrios ni otros campos mediante esta operación.
+
+**Respuesta exitosa: HTTP 200 OK**
+
+Devuelve los datos públicos actualizados del usuario, con la misma estructura y tipos de GET /api/usuarios/me. La respuesta excluye passwordHash.
+
+**Errores de validación**
+
+Un body vacío, incluido un objeto {}, o sin campos editables para el rol autenticado devuelve HTTP 400 Bad Request. También se rechaza cualquier campo no autorizado, aunque se envíe junto con campos válidos; no se aplica ninguna actualización parcial de esa petición.
+
+Los errores utilizan Content-Type application/problem+json, RFC 9457 y las convenciones comunes de autenticación y validación. Ejemplo para un body vacío:
+
+```json
+{
+  "type": "/problems/validation-error",
+  "title": "Datos inválidos",
+  "status": 400,
+  "detail": "Revisá los campos indicados.",
+  "errors": [
+    {
+      "field": "body",
+      "detail": "Informá al menos un campo editable para tu rol."
+    }
+  ]
+}
+```
+
+Cuando se envían campos no autorizados, errors identifica cada campo rechazado. Por ejemplo, phone no está autorizado para TECHNICIAN ni ADMIN, incluso si la petición también incluye name.
 
 ### BLOQUE 6 — CATÁLOGO DE ESPECIALIDADES
 
@@ -710,6 +762,8 @@ createdAt siempre es Fecha. acceptedAt, completedAt y cancelledAt son Fecha o nu
 
 La respuesta del técnico con oferta vigente queda limitada a la solicitud dirigida a él.
 
+Para el CLIENT titular, el detalle incorpora technicianPhone, un string obtenido de Technician.user.phone, después de aceptar la solicitud. No se entrega antes de la aceptación. D-043 regula por separado el acceso del técnico a los datos del cliente.
+
 ### BLOQUE 12B — DETALLE PARA EL TÉCNICO QUE ACEPTÓ
 
 #### `GET /api/solicitudes/:id`
@@ -748,11 +802,11 @@ address es un objeto. street y streetNumber son strings. floor, apartment y dire
 
 clientPhone es un string obtenido de la cuenta del cliente.
 
-La dirección exacta y el teléfono solo se entregan después de comprobar que el técnico autenticado es quien aceptó.
+La dirección exacta y el teléfono solo se entregan después de comprobar que el técnico autenticado es el asignado y que la solicitud está ACCEPTED o IN_PROGRESS (D-043).
 
 Este ejemplo documenta la entrega de address y clientPhone durante ACCEPTED e IN_PROGRESS.
 
-Regla funcional pendiente: definir hasta cuándo el técnico que aceptó conserva acceso a dirección y teléfono después de COMPLETED o CANCELLED. La restricción temporal posterior al cierre requiere esa definición.
+D-043. En COMPLETED y CANCELLED se excluyen address y clientPhone de las respuestas al técnico, incluido el detalle y el historial.
 
 ### BLOQUE 13 — ENVÍO DE OTRA OFERTA
 
@@ -1097,7 +1151,7 @@ technicianId y technicianName admiten null. createdAt es Fecha. Las demás fecha
 
 D-032 y D-033. La respuesta excluye dirección exacta y teléfono. El barrio es el único dato de ubicación.
 
-Regla funcional pendiente: confirmar si Admin recibe description y cómo se garantiza que el texto libre respete D-032 y D-033. El ejemplo omite ese campo como una variante pendiente de confirmación. Admin conserva el barrio como único dato de ubicación y nunca recibe la dirección exacta ni el teléfono del cliente.
+Regla funcional pendiente del PM: confirmar si Admin recibe description y cómo se garantiza que el texto libre respete D-032 y D-033. El ejemplo omite ese campo; este contrato no define ni habilita su acceso hasta contar con esa decisión. Admin conserva el barrio como único dato de ubicación y nunca recibe la dirección exacta ni el teléfono del cliente.
 
 ### BLOQUE 22 — LISTADO DE PERFILES TÉCNICOS
 
@@ -1234,7 +1288,7 @@ La aprobación requiere los datos y las matrículas exigidas para las especialid
 
 Repetir el mismo valor devuelve HTTP 200 sin repetir efectos. La evaluación inicial de un perfil PENDING permite registrar APPROVED o REJECTED.
 
-Regla funcional pendiente: definir si se permite cambiar una aprobación ya emitida o reevaluar un perfil REJECTED, y cuáles son las transiciones y condiciones correspondientes. Esta autorización no se deriva de la regla técnica de reintentos.
+D-042. La reevaluación de perfiles técnicos y el cambio de una decisión de aprobación o rechazo ya emitida quedan fuera del MVP. Solo se permite la evaluación inicial desde PENDING y el reintento del mismo resultado ya registrado. Una decisión diferente sobre un perfil ya evaluado constituye un conflicto de estado; la regla de reintentos no autoriza reevaluarlo.
 
 ### BLOQUE 25 — SUSPENSIÓN DE CUENTA
 
@@ -1246,7 +1300,7 @@ ADMIN con cuenta activa. Puede suspender cuentas CLIENT y TECHNICIAN, según D-0
 
 **Body JSON**
 
-No recibe body. :id es el UUID de User.
+:id es el UUID de User. D-041 requiere confirmación de Admin para cancelar una solicitud IN_PROGRESS del técnico que se suspende. El mecanismo de confirmación y su representación en la petición quedan pendientes de definición; no se fija un body para ese caso. En los demás casos se conserva la operación sin body.
 
 **Respuesta JSON**
 
@@ -1266,7 +1320,9 @@ La suspensión bloquea el acceso a las rutas protegidas mediante la comprobació
 
 Si la cuenta ya está SUSPENDED, devuelve HTTP 200 sin repetir efectos.
 
-Regla funcional pendiente: definir cómo se resuelven los trabajos activos de una cuenta suspendida. Esta operación actualiza accountStatus y aplica el bloqueo de acceso. Cualquier cancelación debe cumplir D-025 y D-026.
+D-041. Si el técnico tiene una solicitud ACCEPTED, esta vuelve a PENDING y queda sin técnico asignado. Si está IN_PROGRESS, Admin debe confirmar la cancelación, respetando D-026 y RN-027. Esta regla corresponde a la suspensión; no es la liberación de otras ofertas por aceptación de D-029.
+
+Quedan pendientes el tratamiento de la oferta aceptada y de acceptedAt al volver a PENDING, y el mecanismo de confirmación de cancelación para IN_PROGRESS. No se define el resultado de una confirmación ausente o rechazada. Los efectos sobre solicitudes activas de cuentas CLIENT suspendidas siguen pendientes de definición funcional.
 
 ### BLOQUE 26 — REACTIVACIÓN DE CUENTA
 
@@ -1713,12 +1769,10 @@ Todas las operaciones pueden devolver HTTP 500 ante una falla inesperada.
 
 ## Puntos pendientes para cerrar el contrato
 
-Las decisiones técnicas de Backend están incorporadas en los contratos y en el manejo de errores. Los siguientes comportamientos requieren una definición funcional y están señalados también en la operación correspondiente.
+Las decisiones aprobadas están incorporadas en los contratos y en el manejo de errores. Los siguientes puntos funcionales o de contrato requieren definición y están señalados también en la operación correspondiente.
 
-1. Regla funcional pendiente: definir hasta cuándo el técnico que aceptó conserva acceso a la dirección exacta y al teléfono del cliente cuando la solicitud pasa a COMPLETED o CANCELLED.
+1. El PM debe confirmar si Admin recibe description y qué tratamiento permite mostrarlo respetando D-032 y D-033, dado que el texto libre puede contener datos restringidos. Este checkpoint no define ni habilita ese acceso.
 
-2. Regla funcional pendiente: confirmar si Admin recibe description y qué tratamiento permite mostrarlo respetando D-032 y D-033, dado que el texto libre puede contener datos restringidos.
+2. D-041: precisar el mecanismo de confirmación de cancelación para IN_PROGRESS, el resultado cuando Admin no confirma y el tratamiento de la oferta aceptada y de acceptedAt al devolver una solicitud ACCEPTED a PENDING.
 
-3. Regla funcional pendiente: definir cómo se resuelven las solicitudes y trabajos activos de cuentas CLIENT o TECHNICIAN suspendidas, respetando las condiciones de cancelación de D-025 y D-026.
-
-4. Regla funcional pendiente: definir si Admin puede cambiar una aprobación ya emitida o reevaluar un perfil REJECTED, incluyendo las transiciones y condiciones permitidas.
+3. Definir los efectos sobre solicitudes activas de cuentas CLIENT suspendidas. D-041 establece los casos ACCEPTED e IN_PROGRESS del técnico suspendido.
