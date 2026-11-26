@@ -28,7 +28,7 @@
 
 **TechnicianSpecialty:** especialidad y matrícula cuando corresponda.
 
-**Neighborhood:** catálogo de barrios de CABA.
+**Neighborhood:** catálogo oficial de los 48 barrios de CABA y su correspondencia con las 15 comunas.
 
 **TechnicianNeighborhood:** cobertura declarada por el Técnico.
 
@@ -43,6 +43,10 @@ phone pertenece a User y es obligatorio en el registro de CLIENT y TECHNICIAN; p
 D-040. Todos los roles pueden editar su propio nombre mediante PATCH /api/usuarios/me. Solo CLIENT puede editar su teléfono. El teléfono del técnico no es editable en el MVP.
 
 preferredTime es informativo y utiliza ANY por defecto.
+
+`Neighborhood.comuna` es un atributo entero obligatorio (`Int`), con valores entre 1 y 15. Representa la comuna oficial a la que pertenece cada barrio.
+
+La comuna se utiliza para la agrupación geográfica de métricas y reportes (D-038). El usuario selecciona el barrio, no la comuna. Su incorporación no modifica el contrato de API.
 
 Esquema de Prisma: [Esquema de Prisma](../prisma/schema.prisma).
 
@@ -118,7 +122,7 @@ La comparación de emails y la unicidad son insensibles a mayúsculas; un duplic
 
 Para Gas y Electricidad exige matrícula por especialidad desde el registro y la verifica antes de aprobar.
 
-Los barrios pertenecen al catálogo de CABA.
+Los barrios pertenecen al catálogo oficial de CABA. Cada barrio tiene un nombre único y una comuna obligatoria entre 1 y 15. El seed valida que cada correspondencia barrio-comuna coincida con el catálogo aprobado.
 
 El registro de un técnico crea la cuenta, el perfil, las especialidades y las relaciones con los barrios en una única transacción. Backend verifica que todos los `neighborhoodIds` existan en el catálogo de CABA. Si un UUID válido no corresponde a un barrio existente, devuelve HTTP 404 y revierte la operación completa.
 
@@ -196,11 +200,13 @@ Un perfil técnico ACTIVE puede iniciar sesión y consultar su identidad y aprob
 
 Versionar en Git los cambios de estructura y revisar el SQL, las claves, los índices y el impacto sobre datos existentes.
 
-Con Prisma ORM 7, usar prisma migrate dev para generar y comprobar en desarrollo, y prisma migrate deploy para aplicar migraciones aprobadas en preproducción y producción.
+Con Prisma ORM 7, las migraciones pueden generarse mediante `prisma migrate dev` en desarrollo o prepararse manualmente mediante SQL cuando se requieren restricciones específicas o transformaciones de datos existentes.
 
-prisma.config.ts configura la conexión. La carga inicial de catálogos se ejecuta con prisma db seed y con el entorno confirmado.
+Utilizar `prisma migrate deploy` para aplicar migraciones previamente revisadas y aprobadas en el entorno autorizado.
 
-Índices parciales previstos. Incluir estos índices parciales en una migración SQL protege las reglas cuando hay operaciones simultáneas. Solo puede haber una oferta PENDING y una ACCEPTED por solicitud, y un solo trabajo activo por técnico.
+`prisma7.config.ts` configura Prisma. La carga inicial del catálogo se ejecuta mediante `npm run seed -- --mode=catalog`, siguiendo las protecciones y condiciones documentadas en [Seed](./seed.md).
+
+Los índices únicos parciales incorporados en las migraciones SQL protegen las reglas cuando hay operaciones simultáneas. Solo puede haber una oferta PENDING y una ACCEPTED por solicitud, y un solo trabajo activo por técnico.
 
 Registrar primero como EXPIRED una oferta vencida permite crear otra sin usar la hora actual como condición del índice.
 
@@ -227,9 +233,24 @@ ALTER TABLE "User" ADD CONSTRAINT "User_phone_by_role"
   OR ("role" = 'ADMIN' AND "phone" IS NULL));
 ```
 
-El índice de email garantiza unicidad sin distinguir mayúsculas, incluso ante registros simultáneos. Antes de implementar las restricciones se revisan posibles duplicados y registros anteriores. Este documento describe el SQL previsto; su aplicación requiere una migración autorizada.
+El índice de email garantiza unicidad sin distinguir mayúsculas, incluso ante registros simultáneos. Antes de aplicar las migraciones se revisan posibles duplicados, registros incompatibles y el impacto sobre los datos existentes. Su aplicación en cada entorno requiere autorización.
 
-La restricción de teléfono documentada incorpora la decisión aprobada para TECHNICIAN. La migración existente aún exige null para ese rol; su adecuación y el tratamiento de cuentas técnicas existentes quedan pendientes de autorización, sin modificar Prisma ni migraciones en este checkpoint.
+La migración `20261125_require_technician_phone` incorpora la decisión aprobada para TECHNICIAN. La restricción `User_phone_by_role` exige un teléfono no nulo ni vacío para CLIENT y TECHNICIAN, y nulo para ADMIN. La validación del formato del teléfono corresponde a Backend.
+
+### Integridad de las comunas
+
+La migración `20261126_add_neighborhood_commune` incorpora el atributo `comuna`, completa los registros existentes según el catálogo oficial y conserva sus UUID y relaciones.
+
+La columna es obligatoria (`NOT NULL`) y PostgreSQL garantiza el rango permitido mediante:
+
+```sql
+CONSTRAINT "Neighborhood_comuna_range"
+CHECK ("comuna" BETWEEN 1 AND 15)
+```
+
+Si existe un barrio que no pertenece al catálogo oficial, la migración aborta y revierte la transacción completa.
+
+La correspondencia exacta entre barrio y comuna se verifica adicionalmente durante la ejecución del seed.
 
 ## Correspondencia con el embudo de adquisición
 

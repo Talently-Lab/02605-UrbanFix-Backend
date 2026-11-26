@@ -95,6 +95,7 @@ model TechnicianSpecialty {
 model Neighborhood {
   id   String @id @default(uuid()) @db.Uuid
   name String @unique
+  comuna Int
 
   technicians TechnicianNeighborhood[]
   requests    ServiceRequest[]

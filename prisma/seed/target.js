@@ -2,6 +2,8 @@ const SEED_TARGETS = Object.freeze({
   urbanfix_s3_test: '55432',
   urbanfix_seed_test: '55433',
   urbanfix_seed_concurrency_test: '55433',
+  urbanfix_seed_cp21_test: '55434',
+  urbanfix_seed_cp21_concurrency_test: '55434',
 });
 
 function validateSeedOptions({ args, env }) {
@@ -12,7 +14,7 @@ function validateSeedOptions({ args, env }) {
   const production = typeof env.NODE_ENV === 'string' && env.NODE_ENV.trim().toLowerCase() === 'production';
   try {
     if (production || typeof connectionString !== 'string' || /[\s\\?#]/.test(connectionString) ||
-        !/^postgres(?:ql)?:\/\/(?:[^@/?#\\\s]+@)?127\.0\.0\.1:(?:55432|55433)\/[a-z0-9_]+$/.test(connectionString)) {
+        !/^postgres(?:ql)?:\/\/(?:[^@/?#\\\s]+@)?127\.0\.0\.1:(?:55432|55433|55434)\/[a-z0-9_]+$/.test(connectionString)) {
       throw new Error();
     }
     const url = new URL(connectionString);
@@ -37,8 +39,13 @@ function validateSeedIntegrationOptions(env) {
       args: ['--mode=catalog'],
       env: { ...env, URBANFIX_SEED_DATABASE_URL: env.URBANFIX_SEED_CONCURRENCY_DATABASE_URL },
     });
-    if (new URL(connectionString).pathname !== '/urbanfix_seed_test' ||
-        new URL(concurrencyConnectionString).pathname !== '/urbanfix_seed_concurrency_test') {
+    const database = new URL(connectionString).pathname;
+    const concurrencyDatabase = new URL(concurrencyConnectionString).pathname;
+    const authorizedPair = [
+      ['/urbanfix_seed_test', '/urbanfix_seed_concurrency_test'],
+      ['/urbanfix_seed_cp21_test', '/urbanfix_seed_cp21_concurrency_test'],
+    ].some(([primary, concurrent]) => database === primary && concurrencyDatabase === concurrent);
+    if (!authorizedPair) {
       throw new Error();
     }
     return { connectionString, concurrencyConnectionString };
