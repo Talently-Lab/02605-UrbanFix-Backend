@@ -8,17 +8,13 @@ const secret = 'routing-test-key';
 const userId = '11111111-1111-4111-8111-111111111111';
 const sign = () => jwt.sign({ userId, role: 'CLIENT' }, secret, { algorithm: 'HS256', expiresIn: 3600 });
 
-async function setup(t, role = 'CLIENT', probe = false) {
+async function setup(t, role = 'CLIENT') {
   let queries = 0;
   const prisma = { user: { findUnique: async () => {
     queries++;
     return { id: userId, role, accountStatus: 'ACTIVE', technician: null };
   } } };
   const app = createApp({ prisma, jwtSecret: secret });
-  if (probe) {
-    app.get('/api/solicitudes/__probe', (req, res) => res.json({ user: req.user }));
-    app.get('/api/admin/__probe', (req, res) => res.json({ user: req.user }));
-  }
   const server = app.listen(0, '127.0.0.1');
   t.after(() => new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve())));
   await once(server, 'listening');
@@ -48,23 +44,25 @@ test('routers protegidos montados responden 401 con contrato de autenticación',
 
 test('admin deniega CLIENT y TECHNICIAN, solicitudes admite cuentas activas', async t => {
   for (const role of ['CLIENT', 'TECHNICIAN']) {
-    const fixture = await setup(t, role, true);
-    const denied = await fixture.get('/api/admin/__probe', `Bearer ${sign()}`);
+    const fixture = await setup(t, role);
+    const denied = await fixture.get('/api/admin/usuarios', `Bearer ${sign()}`);
     assert.equal(denied.status, 403);
     assert.equal((await denied.json()).type, '/problems/forbidden');
-    const allowed = await fixture.get('/api/solicitudes/__probe', `Bearer ${sign()}`);
-    assert.equal(allowed.status, 200);
-    assert.equal((await allowed.json()).user.role, role);
+    const allowed = await fixture.get('/api/solicitudes', `Bearer ${sign()}`);
+    assert.equal(allowed.status, 404);
+    assert.equal((await allowed.json()).type, '/problems/not-found');
+    assert.equal(fixture.queries(), 2);
   }
 });
 
 test('ADMIN llega al montaje de ambos dominios usando el rol persistido', async t => {
-  const fixture = await setup(t, 'ADMIN', true);
-  for (const path of ['/api/admin/__probe', '/api/solicitudes/__probe']) {
+  const fixture = await setup(t, 'ADMIN');
+  for (const path of ['/api/admin/usuarios', '/api/solicitudes']) {
     const response = await fixture.get(path, `Bearer ${sign()}`);
-    assert.equal(response.status, 200);
-    assert.equal((await response.json()).user.role, 'ADMIN');
+    assert.equal(response.status, 404);
+    assert.equal((await response.json()).type, '/problems/not-found');
   }
+  assert.equal(fixture.queries(), 2);
 });
 
 test('routers de producción no implementan endpoints de negocio', async t => {
@@ -72,7 +70,11 @@ test('routers de producción no implementan endpoints de negocio', async t => {
   for (const path of ['/api/admin/usuarios', '/api/solicitudes', '/api/solicitudes/mias']) {
     const response = await fixture.get(path, `Bearer ${sign()}`);
     assert.equal(response.status, 404);
-    await response.text();
+    assert.match(response.headers.get('content-type'), /^application\/problem\+json\b/);
+    assert.deepEqual(await response.json(), {
+      type: '/problems/not-found', title: 'Recurso no encontrado', status: 404,
+      detail: 'El recurso solicitado no está disponible.',
+    });
   }
   assert.equal(fixture.queries(), 3);
   const root = await fixture.get('/');

@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { sendInternalProblem } = require('../lib/internal-problem');
+const { isParserTransportError } = require('../middleware/problem.middleware');
 
 const { registerUser, loginUser } = require('../services/auth.service');
 
@@ -31,29 +32,7 @@ function createAuthRouter({ prisma, jwtSecret }) {
     } catch (error) {
       next(error);
     }
-  }, (error, req, res, next) => {
-    const invalidJson = error instanceof SyntaxError && error.status === 400 && 'body' in error;
-    if (invalidJson) {
-      return res.status(400).type('application/problem+json').json({
-        type: '/problems/invalid-json', title: 'JSON inválido', status: 400,
-        detail: 'El cuerpo de la petición debe contener JSON válido',
-      });
-    }
-
-    const status = [400, 401, 403].includes(error.status) ? error.status : 500;
-    const titles = { 400: 'Datos inválidos', 401: 'Credenciales incorrectas', 403: 'Cuenta suspendida' };
-    if (status === 500) {
-      return sendInternalProblem(res, error, {
-        method: 'POST', route: '/api/auth/login', startedAt: res.locals.authStartedAt,
-        databaseOperation: res.locals.databaseDiagnostics.get(error),
-      });
-    }
-    if (status === 401) res.set('WWW-Authenticate', 'Bearer realm="urbanfix"');
-    return res.status(status).type('application/problem+json').json({
-      type: error.type, title: titles[status], status, detail: error.message,
-      ...(status === 400 && { errors: error.errors }),
-    });
-  });
+  }, handleLoginError);
 
   router.post('/register', initializeDiagnostics, express.json(), async (req, res, next) => {
     try {
@@ -66,40 +45,84 @@ function createAuthRouter({ prisma, jwtSecret }) {
     } catch (error) {
       next(error);
     }
-  }, (error, req, res, next) => {
-    if (error instanceof SyntaxError && error.status === 400 && error.type === 'entity.parse.failed') {
-      return res.status(400).type('application/problem+json').json({
-        type: '/problems/invalid-json', title: 'JSON inválido', status: 400,
-        detail: 'El cuerpo de la petición debe contener JSON válido',
-      });
-    }
-    if (error.status === 400 && error.type === '/problems/validation-error') {
-      return res.status(400).type('application/problem+json').json({
-        type: error.type, title: 'Datos inválidos', status: 400,
-        detail: error.errors.length === 1 && error.errors[0].field === 'email'
-          ? 'Revisá el campo email.' : 'Revisá los campos indicados.',
-        errors: error.errors,
-      });
-    }
-    if (error.status === 409 && error.type === '/problems/email-already-registered') {
-      return res.status(409).type('application/problem+json').json({
-        type: error.type, title: 'Email registrado', status: 409,
-        detail: 'Ya existe una cuenta registrada con ese email.',
-      });
-    }
-    if (error.status === 404 && error.type === '/problems/not-found') {
-      return res.status(404).type('application/problem+json').json({
-        type: error.type, title: 'Recurso no encontrado', status: 404,
-        detail: 'El recurso solicitado no está disponible.',
-      });
-    }
-    return sendInternalProblem(res, error, {
-      method: 'POST', route: '/api/auth/register', startedAt: res.locals.authStartedAt,
-      databaseOperation: res.locals.databaseDiagnostics.get(error),
-    });
-  });
+  }, handleRegistrationError);
 
   return router;
 }
 
-module.exports = { createAuthRouter };
+function handleLoginError(error, req, res, next) {
+  res.locals ??= {};
+  const startedAt = Number.isFinite(res.locals.authStartedAt) ? res.locals.authStartedAt
+    : Number.isFinite(res.locals.problemStartedAt) ? res.locals.problemStartedAt : performance.now();
+  const context = {
+    method: 'POST', route: '/api/auth/login', startedAt,
+    databaseOperation: res.locals.databaseDiagnostics?.get(error),
+  };
+  if (res.headersSent) {
+    res.locals.internalProblemContext = context;
+    return next(error);
+  }
+  if (isParserTransportError(error)) return next(error);
+  const invalidJson = error instanceof SyntaxError && error.status === 400 && 'body' in error;
+  if (invalidJson) {
+    return res.status(400).type('application/problem+json').json({
+      type: '/problems/invalid-json', title: 'JSON inválido', status: 400,
+      detail: 'El cuerpo de la petición debe contener JSON válido',
+    });
+  }
+
+  const status = [400, 401, 403].includes(error.status) ? error.status : 500;
+  const titles = { 400: 'Datos inválidos', 401: 'Credenciales incorrectas', 403: 'Cuenta suspendida' };
+  if (status === 500) {
+    return sendInternalProblem(res, error, context);
+  }
+  if (status === 401) res.set('WWW-Authenticate', 'Bearer realm="urbanfix"');
+  return res.status(status).type('application/problem+json').json({
+    type: error.type, title: titles[status], status, detail: error.message,
+    ...(status === 400 && { errors: error.errors }),
+  });
+}
+
+function handleRegistrationError(error, req, res, next) {
+  res.locals ??= {};
+  const startedAt = Number.isFinite(res.locals.authStartedAt) ? res.locals.authStartedAt
+    : Number.isFinite(res.locals.problemStartedAt) ? res.locals.problemStartedAt : performance.now();
+  const context = {
+    method: 'POST', route: '/api/auth/register', startedAt,
+    databaseOperation: res.locals.databaseDiagnostics?.get(error),
+  };
+  if (res.headersSent) {
+    res.locals.internalProblemContext = context;
+    return next(error);
+  }
+  if (isParserTransportError(error)) return next(error);
+  if (error instanceof SyntaxError && error.status === 400 && error.type === 'entity.parse.failed') {
+    return res.status(400).type('application/problem+json').json({
+      type: '/problems/invalid-json', title: 'JSON inválido', status: 400,
+      detail: 'El cuerpo de la petición debe contener JSON válido',
+    });
+  }
+  if (error.status === 400 && error.type === '/problems/validation-error') {
+    return res.status(400).type('application/problem+json').json({
+      type: error.type, title: 'Datos inválidos', status: 400,
+      detail: error.errors.length === 1 && error.errors[0].field === 'email'
+        ? 'Revisá el campo email.' : 'Revisá los campos indicados.',
+      errors: error.errors,
+    });
+  }
+  if (error.status === 409 && error.type === '/problems/email-already-registered') {
+    return res.status(409).type('application/problem+json').json({
+      type: error.type, title: 'Email registrado', status: 409,
+      detail: 'Ya existe una cuenta registrada con ese email.',
+    });
+  }
+  if (error.status === 404 && error.type === '/problems/not-found') {
+    return res.status(404).type('application/problem+json').json({
+      type: error.type, title: 'Recurso no encontrado', status: 404,
+      detail: 'El recurso solicitado no está disponible.',
+    });
+  }
+  return sendInternalProblem(res, error, context);
+}
+
+module.exports = { createAuthRouter, handleLoginError, handleRegistrationError };

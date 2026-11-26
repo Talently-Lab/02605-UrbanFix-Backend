@@ -1459,6 +1459,32 @@ Si el body contiene JSON mal formado, devuelve HTTP 400 con type /problems/inval
 
 Frontend muestra errors en el campo correspondiente. Puede convertir el email a minúsculas antes de enviarlo. Un registro con un email existente conserva HTTP 409 y /problems/email-already-registered.
 
+##### HTTP 413
+
+Cuando el parser rechaza un body por superar el tamaño máximo permitido, devuelve Content-Type application/problem+json:
+
+```json
+{
+  "type": "/problems/payload-too-large",
+  "title": "Solicitud demasiado grande",
+  "status": 413,
+  "detail": "El cuerpo de la solicitud supera el tamaño máximo permitido."
+}
+```
+
+##### HTTP 415
+
+Cuando el parser rechaza un formato, charset o codificación no soportados, devuelve Content-Type application/problem+json:
+
+```json
+{
+  "type": "/problems/unsupported-media-type",
+  "title": "Formato no soportado",
+  "status": 415,
+  "detail": "El formato o la codificación de la solicitud no están soportados."
+}
+```
+
 #### BLOQUE 3 — AUTENTICACIÓN
 
 ##### HTTP 401

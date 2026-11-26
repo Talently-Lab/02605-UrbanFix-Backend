@@ -3,6 +3,7 @@ const path = require('node:path');
 const { PrismaClientInitializationError, PrismaClientKnownRequestError } = require('@prisma/client/runtime/client');
 
 const projectRoot = path.resolve(__dirname, '../..');
+const incidentTraceIds = new WeakMap();
 const frameFunctions = new Map([
   ['src/index.js', ['createApp']],
   ['src/routes/auth.routes.js', ['createAuthRouter', 'signToken']],
@@ -59,8 +60,11 @@ function sanitizeStack(stack) {
   return frames;
 }
 
-function sendInternalProblem(res, error, { method, route, startedAt, event = 'API_INTERNAL_ERROR', databaseOperation }) {
+function logInternalProblem(res, error, { method, route, startedAt, event = 'API_INTERNAL_ERROR', databaseOperation }) {
+  const existingTraceId = incidentTraceIds.get(res);
+  if (existingTraceId) return existingTraceId;
   const traceId = randomUUID();
+  incidentTraceIds.set(res, traceId);
   try {
     const prismaCode = getPrismaCode(error);
     const stackFrames = sanitizeStack(error?.stack);
@@ -73,10 +77,15 @@ function sendInternalProblem(res, error, { method, route, startedAt, event = 'AP
     }));
   } catch {}
 
+  return traceId;
+}
+
+function sendInternalProblem(res, error, context) {
+  const traceId = logInternalProblem(res, error, context);
   return res.status(500).type('application/problem+json').json({
     type: '/problems/internal-error', title: 'Error interno', status: 500,
     detail: 'No pudimos completar la operación. Intentá nuevamente más tarde.', traceId,
   });
 }
 
-module.exports = { sendInternalProblem };
+module.exports = { sendInternalProblem, logInternalProblem };

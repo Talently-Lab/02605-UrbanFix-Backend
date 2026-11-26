@@ -43,6 +43,26 @@ La configuración de Prisma se encuentra en `prisma7.config.ts` y utiliza la var
 
 El archivo `.env` está excluido del control de versiones para evitar publicar credenciales.
 
+`FRONTEND_URL` es obligatoria durante el arranque real del servidor. Se carga mediante `dotenv` y se valida antes de cargar Prisma o escuchar conexiones. Si falta o es inválida, el proceso termina con código 1 y un mensaje descriptivo que no muestra su contenido. `.env.example` contiene únicamente ejemplos sin credenciales.
+
+Ejemplo de un origen para desarrollo local:
+
+```dotenv
+FRONTEND_URL=http://localhost:5173
+```
+
+Ejemplo con varios orígenes separados por comas:
+
+```dotenv
+FRONTEND_URL=http://localhost:5173,https://frontend.example.test
+```
+
+Los dominios y puertos son ejemplos: deben reemplazarse por los orígenes autorizados del Frontend de cada entorno. En despliegue, configurar la variable con los dominios HTTPS correspondientes. Solo se admiten URLs HTTP/HTTPS de origen, con barra final `/` opcional, sin credenciales, paths de aplicación, query strings, fragmentos ni comodines.
+
+CORS compara exactamente los orígenes configurados, admite GET, HEAD, POST, PATCH y OPTIONS, permite `Authorization` y `Content-Type` y expone `WWW-Authenticate`. El preflight autorizado devuelve 204 antes de autenticación. No se habilitan credenciales de navegador. Un origen no autorizado no recibe autorización CORS ni un rechazo HTTP 403 adicional; las peticiones sin `Origin` siguen su procesamiento normal.
+
+Los tests inyectan los orígenes en `createApp` y no necesitan leer `.env`. Sin orígenes inyectados, la aplicación de prueba no autoriza ningún origen CORS.
+
 La conexión con Neon todavía no ha sido verificada y no es necesaria para ejecutar el endpoint inicial de Express.
 
 ## 6. Instalación y ejecución
