@@ -1,4 +1,6 @@
-# Catálogo oficial de barrios, Golden y Volumen — S4-05 CP2 a CP4
+# Catálogo oficial de barrios, Golden y Volumen — S4-05 CP2 a CP5
+
+Estado vigente: CP5 completado, **LISTO PARA REVISIÓN**. Golden y Volumen están persistidos en el entorno local exclusivo de CP5. La infraestructura temporal de CP2/CP2.1 ya no está disponible; sus resultados se conservan como evidencias históricas. Ver el registro de CP5 al final de este documento antes de utilizar instrucciones de infraestructura.
 
 El modo `catalog` carga datos oficiales de referencia. Es independiente de los datasets ficticios golden y volumen. Ningún seed se ejecuta al importar sus módulos, iniciar la API o ejecutar migraciones.
 
@@ -25,8 +27,8 @@ La variable dedicada `URBANFIX_SEED_DATABASE_URL` debe identificar exactamente u
 | `127.0.0.1` | `55433` | `urbanfix_seed_concurrency_test`      | Integración CP2: cargas concurrentes.                                                               |
 | `127.0.0.1` | `55434` | `urbanfix_seed_cp21_test`             | Integración CP2.1: integridad, discrepancias, rollback y persistencia.                              |
 | `127.0.0.1` | `55434` | `urbanfix_seed_cp21_concurrency_test` | Integración CP2.1: cargas concurrentes.                                                             |
-| `127.0.0.1` | `55434` | `urbanfix_seed_cp3_golden_test`       | Integración Golden: preparación y ejecución pendientes de CP5.                                      |
-| `127.0.0.1` | `55434` | `urbanfix_seed_cp4_volume_test`       | Integración Volumen: preparación y ejecución pendientes de CP5.                                     |
+| `127.0.0.1` | `55434` | `urbanfix_seed_cp3_golden_test`       | Golden persistido y verificado en CP5; conservar, no repetir integración sobre esta base poblada.     |
+| `127.0.0.1` | `55434` | `urbanfix_seed_cp4_volume_test`       | Volumen persistido y verificado en CP5; conservar, no repetir integración sobre esta base poblada.    |
 
 Se permiten los protocolos `postgresql` y `postgres` y credenciales locales de prueba. No se admiten otros hosts, puertos, bases, parámetros de conexión, fragmentos, rutas alternativas ni espacios. `NODE_ENV=production` también se rechaza, pero no es la única protección. Mantener un destino en esta lista no autoriza ejecutar comandos sobre él.
 
@@ -449,22 +451,22 @@ Las tres cuentas de prueba son C44, C45 y T11 de Volumen. Están incluidas en la
 
 Estos resultados describen el fixture para cualquier D admitida, no crean consultas productivas ni resuelven indicadores pendientes. Para las tasas de madurez se usan las solicitudes de los 35 días con createdAt < D−24 h, excluyendo clientes de prueba, sin excluir moderaciones: n = 188. No es la cohorte de ocho días de los KPIs de Golden. Si se aplica además la variante de exclusión de moderación, la población baja a 183; se conservan ambos tratamientos sin elegir una definición productiva.
 
-| Distribución | Resultado y denominador | Objetivo DA y desviación |
-| --- | --- | --- |
-| Solicitudes por semana | 25/35/45/55/40; total 200 | Coincide con la propuesta |
-| Aceptadas alguna vez, maduras limpias | 137/188 = 72,87 % | 70–75 %; dentro del rango |
-| Aceptadas en hasta 2 h, maduras limpias | 57/188 = 30,32 % | 30–40 %; dentro del rango |
-| Aceptadas en hasta 24 h, maduras limpias | 121/188 = 64,36 % | 60–70 %; dentro del rango |
-| Mediana de espera de aceptadas maduras limpias | 150 minutos; n = 137 aceptadas | Cerca de 2,5 h; coincide |
-| Canceladas antes de aceptar, maduras limpias | 25/188 = 13,30 % | Cerca de 10 %; +3,30 puntos |
-| Autor de esas 25 cancelaciones | 20 CLIENT y 5 ADMIN: 80/20 % | Coincide; cumple al menos cinco de Admin |
-| Canceladas tras aceptar, maduras limpias | 6/188 = 3,19 %, todas por Admin | Cerca de 3 %; +0,19 puntos |
-| PENDING sin asignación y con más de 24 h | 26/188 = 13,83 % | Cerca de 15 %; −1,17 puntos |
-| Solicitudes maduras limpias con reoferta | 40/188 = 21,28 % | Cerca de 20 %; +1,28 puntos; sobre total bruto: 40/200 = 20 % |
-| Ofertas rechazadas limpias | 35/230 = 15,22 % | Cerca de 15 %; +0,22 puntos |
-| Ofertas efectivamente vencidas limpias | 23/230 = 10,00 % | Cerca de 10 %; coincide |
-| PENDING guardadas pero ya vencidas | 4 ofertas | Objetivo 3–5; dentro del rango |
-| Creaciones de lunes a viernes | 171/200 = 85,50 % | Mayor carga en días hábiles; sin porcentaje obligatorio |
+| Distribución                                   | Resultado y denominador         | Objetivo DA y desviación                                      |
+| ---------------------------------------------- | ------------------------------- | ------------------------------------------------------------- |
+| Solicitudes por semana                         | 25/35/45/55/40; total 200       | Coincide con la propuesta                                     |
+| Aceptadas alguna vez, maduras limpias          | 137/188 = 72,87 %               | 70–75 %; dentro del rango                                     |
+| Aceptadas en hasta 2 h, maduras limpias        | 57/188 = 30,32 %                | 30–40 %; dentro del rango                                     |
+| Aceptadas en hasta 24 h, maduras limpias       | 121/188 = 64,36 %               | 60–70 %; dentro del rango                                     |
+| Mediana de espera de aceptadas maduras limpias | 150 minutos; n = 137 aceptadas  | Cerca de 2,5 h; coincide                                      |
+| Canceladas antes de aceptar, maduras limpias   | 25/188 = 13,30 %                | Cerca de 10 %; +3,30 puntos                                   |
+| Autor de esas 25 cancelaciones                 | 20 CLIENT y 5 ADMIN: 80/20 %    | Coincide; cumple al menos cinco de Admin                      |
+| Canceladas tras aceptar, maduras limpias       | 6/188 = 3,19 %, todas por Admin | Cerca de 3 %; +0,19 puntos                                    |
+| PENDING sin asignación y con más de 24 h       | 26/188 = 13,83 %                | Cerca de 15 %; −1,17 puntos                                   |
+| Solicitudes maduras limpias con reoferta       | 40/188 = 21,28 %                | Cerca de 20 %; +1,28 puntos; sobre total bruto: 40/200 = 20 % |
+| Ofertas rechazadas limpias                     | 35/230 = 15,22 %                | Cerca de 15 %; +0,22 puntos                                   |
+| Ofertas efectivamente vencidas limpias         | 23/230 = 10,00 %                | Cerca de 10 %; coincide                                       |
+| PENDING guardadas pero ya vencidas             | 4 ofertas                       | Objetivo 3–5; dentro del rango                                |
+| Creaciones de lunes a viernes                  | 171/200 = 85,50 %               | Mayor carga en días hábiles; sin porcentaje obligatorio       |
 
 Categorías sobre 200 solicitudes brutas: PLUMBING 70 (35 %), ELECTRICITY 50 (25 %), LOCKSMITH 30 (15 %), GAS 30 (15 %) y MASONRY 20 (10 %), sin desviación. Sobre 190 solicitudes limpias son 69, 46, 28, 28 y 19 respectivamente: 36,32 %, 24,21 %, 14,74 %, 14,74 % y 10,00 %. Horarios preferidos brutos: ANY 100/200 (50 %), MORNING 60/200 (30 %), AFTERNOON 40/200 (20 %), sin desviación; limpios: 97/190 (51,05 %), 56/190 (29,47 %) y 37/190 (19,47 %).
 
@@ -502,3 +504,127 @@ npm.cmd run test:seed:volume:integration
 ```
 
 La creación y utilización de la nueva base, snapshots de las bases conservadas y la ejecución conjunta de Golden/Volumen quedan para CP5 con autorización específica. No se ejecutaron operaciones sobre PostgreSQL, Docker, Neon o Render, ni migraciones o seeds. Las pruebas seguras deshabilitan ambas guardas de integración; las comprobaciones reales de PostgreSQL permanecen pendientes y no se afirma RED/GREEN sobre ellas.
+
+## CP5 — Infraestructura persistente e integración real
+
+### Pérdida de infraestructura temporal
+
+El 27/11/2026 la usuaria informó que la computadora se apagó durante la noche. Los contenedores históricos `urbanfix-cp2-seed-postgres` y `urbanfix-cp21-seed-integration-postgres`, configurados con `--rm` y tmpfs, ya no aparecen en Docker. Los contextos `default` y `desktop-linux` apuntan al mismo daemon Linux; tampoco hay volúmenes de CP2/CP2.1. La situación es consistente con la eliminación de los contenedores y la pérdida del almacenamiento temporal tras el apagado, aunque el inventario no reconstruye el evento exacto.
+
+Las cinco bases históricas no se reconstruyeron. Ya no es posible capturar ni comparar sus snapshots de datos, estructura e historial de migraciones. La usuaria aceptó expresamente esta limitación al autorizar el plan ajustado de CP5. Los resultados de CP2 y CP2.1 documentados arriba se conservan como evidencia histórica, no como validación de su disponibilidad actual.
+
+### Primer bloque: recursos creados y comprobaciones reales
+
+Se creó exclusivamente el contenedor `urbanfix-cp5-seed-postgres`, ID `338d693d0106029ddd276b9bedb1ce9a9a4d78db0062751a733bd62b1aac6a0e`, y el volumen `urbanfix-cp5-seed-pgdata`, dentro del contexto `desktop-linux`. Se utilizó la imagen local fijada por ID `sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6`, sin descargas ni instalaciones.
+
+Se verificaron publicación exclusiva en `127.0.0.1:55434`, usuario `urbanfix_cp21`, límite de 1 CPU y 512 MiB, `AutoRemove=false`, un único montaje de volumen en `/var/lib/postgresql` y política `--restart=no`. PostgreSQL acepta conexiones y reporta `18.6 (Debian 18.6-1.pgdg13+2)`, con data_directory `/var/lib/postgresql/18/docker`. El filesystem reportó 963419 MiB disponibles en ese momento; es capacidad del filesystem de Docker, no una reserva exclusiva. El contenedor quedó en ejecución, con cero reinicios y sin OOM registrado.
+
+La credencial aleatoria hexadecimal de 32 caracteres se generó en memoria y se suministró mediante el entorno mínimo del proceso hijo, sin incluirla en argumentos, archivos ni salidas. Su recuperación desde la configuración del contenedor se validó sin imprimirla. Docker conserva la variable de inicialización en su configuración; las referencias temporales del coordinador se limpiaron y las conexiones se cerraron mediante `finally`.
+
+La preparación se interrumpió antes de crear las bases funcionales: el coordinador introdujo una comparación excesivamente estricta con el sufijo Debian `+1`, mientras la imagen disponible reporta `+2`. PostgreSQL sí corresponde a 18.6; el fallo pertenece a esa comprobación del coordinador, no al seed. Conforme a la condición de interrupción, no se corrigió ni reintentó la operación automáticamente.
+
+Una transacción `REPEATABLE READ READ ONLY`, con `default_transaction_read_only=on`, confirmó que solo existe `postgres` como base no-template y que no hay otros clientes conectados. `urbanfix_seed_cp3_golden_test` y `urbanfix_seed_cp4_volume_test` todavía no existen. No se ejecutaron migraciones, catálogos, integraciones reales ni runners Golden/Volumen; por tanto, no hay evidencias de persistencia de datasets ni métricas SQL de CP5.
+
+Se compararon exactamente ID, nombre, estado, montajes, HostConfig e imagen de los seis contenedores preexistentes antes y después de este bloque, sin diferencias. Los volúmenes anteriores `urbanfix-pgdata` y `vscode` permanecen presentes; solo se añadió el volumen exclusivo de CP5. No se accedió a las bases de esos contenedores ni se modificaron sus recursos. Esta comprobación de infraestructura no acredita snapshots de sus datos.
+
+### Ajuste Golden y verificaciones de código
+
+En `test/seed.golden.integration.test.js` se incorporó un clasificador local al test: admite P2034 y P2002 únicamente cuando los metadatos identifican User.id/User.email o las restricciones `User_pkey`/`User_email_key`. Rechaza modelos distintos, restricciones desconocidas, metadatos ausentes o contradictorios y otros códigos. El diagnóstico solo emite código y restricción normalizados; no imprime mensajes, stack ni datos recibidos. Se conservan las aserciones de contenido exacto y suma de 96 inserciones, sin reintentos ni cambios del seed.
+
+TDD: tras corregir un error de sintaxis del test nuevo, la prueba específica falló por ausencia del clasificador (RED) y luego aprobó con la implementación mínima (GREEN). Comando: `node --test --test-name-pattern='Golden: clasifica' test/seed.golden.integration.test.js`. La suite estándar `npm.cmd test`, en un proceso hijo aislado con ambas guardas de integración en `0` y dotenv dirigido a `os.devNull`, obtuvo 280 tests: 274 aprobados, cero fallidos y seis integraciones omitidas. `node --check test/seed.golden.integration.test.js` también aprobó. El proyecto no define scripts de lint, type checking ni build. Las integraciones reales y sus métricas siguen pendientes; no se repitieron las campañas PostgreSQL anteriores.
+
+### Conservación hasta el cierre de Sprint 4
+
+El contenedor y el volumen deben conservarse hasta finalizar Sprint 4. Para detener y volver a iniciar el mismo contenedor, cuando corresponda, sin eliminarlo ni modificar el volumen:
+
+```powershell
+docker --context desktop-linux stop urbanfix-cp5-seed-postgres
+docker --context desktop-linux start urbanfix-cp5-seed-postgres
+docker --context desktop-linux exec urbanfix-cp5-seed-postgres pg_isready --username=urbanfix_cp21 --dbname=postgres
+```
+
+Estos comandos de mantenimiento no se ejecutaron durante este bloque. `stop` detiene PostgreSQL; `start` reutiliza el contenedor y su volumen, conservando los datos. Con `--restart=no`, después de un apagado se requiere iniciarlo explícitamente. El volumen persistente no sustituye un backup. No utilizar instrucciones históricas de CP2/CP2.1 para recrear recursos ni ejecutar integraciones que requieren bases vacías sobre bases pobladas.
+
+Pendiente del cierre de Sprint 4: evaluar la necesidad de respaldo y conservación, y solicitar autorización específica antes de eliminar el contenedor o su volumen. No hay eliminación automática autorizada.
+
+Estado al interrumpir el primer bloque: **PENDIENTE**. Quedaban por resolver la comprobación del sufijo de distribución del coordinador y la creación exclusiva de las dos bases nuevas, sin recrear infraestructura ni las cinco bases históricas. El cierre definitivo se registra a continuación.
+
+### Reanudación y cierre definitivo
+
+La usuaria autorizó aceptar PostgreSQL `18.6 (Debian 18.6-1.pgdg13+2)` para la misma imagen local. El coordinador mantuvo la comparación exacta de imagen y contenedor, versión, puerto, usuario, volumen, límites y estado, sin modificar archivos de código adicionales. La lectura del schema generado utilizó la ruta real resuelta por pnpm: coincidió con el schema vigente salvo formato, sin regenerar Prisma Client ni instalar dependencias.
+
+Se reutilizaron el contenedor y el volumen existentes. Se crearon únicamente `urbanfix_seed_cp3_golden_test` y `urbanfix_seed_cp4_volume_test`, con `createdb --username=urbanfix_cp21 --owner=urbanfix_cp21 --template=template0` dentro de `urbanfix-cp5-seed-postgres`. No se reconstruyeron las bases anteriores.
+
+En cada base se ejecutaron `prisma migrate deploy --config=prisma7.config.ts` y `prisma migrate status --config=prisma7.config.ts`, mediante Node y el CLI local resuelto con `require.resolve('prisma/build/index.js')`. Se verificaron los cinco nombres de migración aprobados, finalización, ausencia de rollback, un paso aplicado por migración y checksums SHA-256 coincidentes con los bytes de cada archivo local. Cada CLI recibió exclusivamente su DATABASE_URL local en un entorno mínimo, con dotenv dirigido a `os.devNull`.
+
+Después se ejecutó `npm.cmd run seed -- --mode=catalog` en ambas bases: cada ejecución informó `existing=0, inserted=48, total=48`. SQL de solo lectura verificó los 48 nombres y correspondencias oficiales exactas, 15 comunas y las seis tablas ficticias vacías antes de comenzar cada integración.
+
+| Ejecución real, en orden | Resultado |
+| --- | --- |
+| `npm.cmd run test:seed:golden:integration` | 8 tests aprobados, 0 fallidos, 0 omitidos; incluye el clasificador y la integración con sus subtests |
+| `npm.cmd run seed -- --mode=golden` | `existing=96, inserted=0, total=96` |
+| `npm.cmd run test:seed:volume:integration` | 6 tests aprobados, 0 fallidos, 0 omitidos |
+| `npm.cmd run seed -- --mode=volume` | `existing=695, inserted=0, total=695` |
+
+Las integraciones realizaron la primera carga y conservaron sus commits. Cada runner posterior se ejecutó en un proceso independiente con la conexión dedicada `URBANFIX_SEED_DATABASE_URL`. La guarda `URBANFIX_RUN_SEED_DB_TESTS=1` se proporcionó solo al archivo de integración correspondiente; las integraciones ajenas permanecieron deshabilitadas. Volumen recibió `URBANFIX_SEED_REFERENCE_TIME=2026-12-07T03:00:00.000Z`; Golden utilizó `R=2026-12-07T15:00:00.000Z`. No se extrajeron comandos desde Markdown ni se utilizaron conexiones externas.
+
+Golden verificó preservación de un registro ajeno, colisiones, rollback real tras el último INSERT, concurrencia, contenido exacto y segunda carga idempotente. La concurrencia produjo P2034 y se diagnosticó únicamente como `{"code":"P2034","constraint":"serialization"}`; no necesitó reintentos. P2002 quedó cubierto mediante los errores simulados del clasificador, no observado en esta ejecución real. Volumen verificó preservación, colisiones, rollback real, contenido exacto, idempotencia y rechazo de una referencia temporal diferente sin modificar datos. Sus consultas SQL verificaron elegibilidad, disponibilidad histórica sin solapamientos y vigencia de ofertas.
+
+### Persistencia y métricas comprobadas
+
+Las comprobaciones adicionales usaron conexiones nuevas, `default_transaction_read_only=on` y transacciones `REPEATABLE READ READ ONLY`. Los conteos persistidos coincidieron exactamente con los datasets aprobados:
+
+| Tabla o población | Golden | Volumen |
+| --- | ---: | ---: |
+| User | 17: 7 CLIENT, 9 TECHNICIAN, 1 ADMIN | 62: 45 CLIENT, 15 TECHNICIAN, 2 ADMIN |
+| Technician | 9 | 15 |
+| TechnicianSpecialty | 13 | 43 |
+| TechnicianNeighborhood | 19 | 135 |
+| ServiceRequest | 18 | 200 |
+| ServiceOffer | 20 | 240 |
+| Neighborhood, independiente del total ficticio | 48 | 48 |
+| Solicitudes / ofertas limpias | 17 / 19 | 190 / 230 |
+
+Los filtros SQL identificaron exactamente Golden C7/T9 y Volume C44/C45/T11 como cuentas de prueba. También se compararon contra el fixture aprobado las distribuciones SQL brutas y limpias por categoría, barrio, horario preferido, estado de solicitud y estado almacenado de oferta, sin diferencias.
+
+| Métrica Golden | SQL obtenido, igual al esperado |
+| --- | --- |
+| Cohorte madura, excluyendo moderación previa a aceptar | n=13; 10 aceptadas: 76,92 % |
+| Misma variante: liquidez 2 h / 24 h | 4/13=30,77 % / 9/13=69,23 % |
+| Cohorte madura, incluyendo moderación | n=14; 10 aceptadas: 71,43 % |
+| Misma variante: liquidez 2 h / 24 h | 4/14=28,57 % / 9/14=64,29 % |
+| Mediana / P90 | 150,5 / 1451,1 minutos |
+| Demanda reciente / técnicos activos según resultado DA | 15 / 5; ratio 3,00 |
+| Respuesta de ofertas elegibles | 10 ACCEPTED / 13 = 76,92 % |
+
+Se conserva la discrepancia funcional documentada sobre técnicos activos: estos cinco corresponden al resultado DA que incluye rechazos; no se eligió ni implementó una definición productiva diferente.
+
+| Métrica Volumen | SQL obtenido, igual al esperado |
+| --- | --- |
+| Solicitudes maduras limpias | 188; 183 al excluir además moderación previa a aceptar |
+| Liquidez hasta 2 h | 57/188 = 30,32 % |
+| Liquidez hasta 24 h | 121/188 = 64,36 % |
+| Aceptación madura limpia | 137/188 = 72,87 % |
+| Mediana de aceptadas maduras limpias | 150 minutos |
+| Rechazos limpios | 35/230 = 15,22 % |
+| Vencimientos efectivos limpios | 23/230 = 10,00 %; incluyen 4 PENDING almacenadas ya vencidas |
+| Canceladas antes / después de aceptar, maduras limpias | 25 / 6; PENDING maduras limpias: 26 |
+| Solicitudes por semana | 25 / 35 / 45 / 55 / 40 |
+| Creaciones en días hábiles | 171/200; cero creaciones fuera de 08:00–22:00 Buenos Aires o posteriores a D−1 h |
+
+Se capturaron en memoria snapshots completos de las siete tablas y `_prisma_migrations` de cada base nueva. Coincidieron exactamente antes/después del runner independiente y nuevamente al cierre. Huellas SHA-256 de la serialización de esos snapshots, incluyendo historial de migraciones:
+
+- Golden: `ced1bc2ab8ea8dacb6cc68eb7cf0a53c57dd2fbaf405a6d2bea8783fb60b4b69f`.
+- Volumen: `e0603e2260a80688af0753aa2cacd473262363ff4dda5da39a8848c688e3d2e7`.
+
+### Preservación y alcance de la entrega
+
+Al cierre, los seis contenedores ajenos conservaron exactamente ID, nombre, estado, montajes, HostConfig e imagen. El inventario de volúmenes no cambió durante la reanudación. No se inició, detuvo ni eliminó ningún contenedor. CP5 mantiene su mismo ID e imagen, está en ejecución, con cero reinicios y sin OOM registrado; la muestra final reportó 101,8 MiB de 512 MiB y CPU 0,00 %. El volumen y ambas bases quedan conservados hasta el cierre de Sprint 4. La consulta final detectó solo `postgres` y las dos bases autorizadas, sin sesiones cliente ajenas.
+
+No se repitieron el TDD ni la suite segura ya aprobados: el hash del test Golden permaneció idéntico durante la reanudación y solo se actualizó esta documentación. Se mantienen como evidencia los 274 tests aprobados y seis integraciones omitidas de la suite segura del primer bloque. Las integraciones reales descritas arriba complementan esa verificación. No hay scripts de lint, type checking ni build definidos. Se revisaron `git --no-pager diff`, `git --no-pager diff --check` y `git status`; el cambio documental local previo permanece preservado.
+
+Los criterios de aceptación de CP5 se cumplen: el seed creó usuarios de cada rol y ambos datasets se ejecutaron y persistieron correctamente en PostgreSQL. La imposibilidad de comparar snapshots de las cinco bases históricas permanece documentada y expresamente aceptada; no se presenta como una prueba aprobada. Los resultados corresponden únicamente al entorno local aislado, sin deployment, operaciones sobre Neon/Render, cambios de negocio, esquema, migraciones, datasets, endpoints ni Frontend. No se realizaron staging, commits, push ni PRs.
+
+El coordinador terminó con cero conexiones abiertas y limpió las referencias temporales a credenciales mediante `finally`. Tiempo medido de la reanudación hasta esa limpieza: 27,3 minutos; sumado al primer coordinador de 16 minutos, 43,3 minutos instrumentados. Esta suma no incluye el TDD previo ni todos los intercambios de revisión, y no representa tiempo de CPU de PostgreSQL.
+
+Estado definitivo: **LISTO PARA REVISIÓN**. Quedan S4-06 y S4-07, sin iniciar. La evaluación y eventual eliminación de contenedor/volumen sigue pendiente del cierre de Sprint 4 y requiere autorización específica.

@@ -7,6 +7,49 @@ const { createGoldenDataset } = require('../prisma/data/golden');
 const { seedGolden } = require('../prisma/seed/golden');
 const { validateCatalogCsv } = require('../prisma/seed/validate');
 
+function classifyGoldenConflict(error) {
+  if (error?.code === 'P2034') return { code: 'P2034', constraint: 'serialization' };
+  if (error?.code !== 'P2002' || error.meta?.modelName !== 'User') return null;
+  const { target, driverAdapterError } = error.meta;
+  const cause = driverAdapterError?.cause;
+  const constraints = [];
+  if (target !== undefined) {
+    if (!Array.isArray(target) || target.length !== 1 || !['id', 'email'].includes(target[0])) return null;
+    constraints.push(target[0] === 'id' ? 'User_pkey' : 'User_email_key');
+  }
+  if (driverAdapterError !== undefined) {
+    if (cause?.kind !== 'UniqueConstraintViolation' ||
+        !['User_pkey', 'User_email_key'].includes(cause.constraint?.index)) return null;
+    constraints.push(cause.constraint.index);
+  }
+  if (!constraints.length || constraints.some(value => value !== constraints[0])) return null;
+  return { code: 'P2002', constraint: constraints[0] };
+}
+
+test('Golden: clasifica solo conflictos de concurrencia esperados y sanitiza el diagnóstico', () => {
+  assert.deepEqual(classifyGoldenConflict({ code: 'P2034' }), { code: 'P2034', constraint: 'serialization' });
+  for (const [field, index] of [['id', 'User_pkey'], ['email', 'User_email_key']]) {
+    assert.deepEqual(classifyGoldenConflict({ code: 'P2002', meta: { modelName: 'User', target: [field] } }),
+      { code: 'P2002', constraint: index });
+    assert.deepEqual(classifyGoldenConflict({ code: 'P2002', meta: { modelName: 'User',
+      driverAdapterError: { cause: { kind: 'UniqueConstraintViolation', constraint: { index } } } } }),
+    { code: 'P2002', constraint: index });
+  }
+  for (const error of [null, {}, { code: 'P1001' }, { code: 'P2002' },
+    { code: 'P2002', meta: { target: ['email'] } },
+    { code: 'P2002', meta: { modelName: 'Technician', target: ['id'] } },
+    { code: 'P2002', meta: { modelName: 'User', target: ['id', 'email'] } },
+    { code: 'P2002', meta: { modelName: 'User', target: ['phone'] } },
+    { code: 'P2002', meta: { modelName: 'User', target: ['email'],
+      driverAdapterError: { cause: { kind: 'UniqueConstraintViolation', constraint: { index: 'User_pkey' } } } } },
+    { code: 'P2002', meta: { modelName: 'User', driverAdapterError: { cause: {
+      kind: 'UniqueConstraintViolation', constraint: { index: 'untrusted secret' } } } } },
+  ]) assert.equal(classifyGoldenConflict(error), null);
+  const diagnostic = classifyGoldenConflict({ code: 'P2002', message: 'secret', stack: 'secret',
+    meta: { modelName: 'User', target: ['email'], detail: 'secret@example.com' } });
+  assert.deepEqual(diagnostic, { code: 'P2002', constraint: 'User_email_key' });
+});
+
 test('PostgreSQL Golden: lotes, rollback, preservación, concurrencia y contrato DA', {
   skip: process.env.URBANFIX_RUN_SEED_DB_TESTS !== '1',
 }, async (t) => {
@@ -91,7 +134,11 @@ test('PostgreSQL Golden: lotes, rollback, preservación, concurrencia y contrato
     assert.ok(committed.length >= 1);
     assert.equal(committed.reduce((sum, result) => sum + result.value.inserted, 0), 96);
     for (const result of results) {
-      if (result.status === 'rejected') assert.equal(result.reason.code, 'P2034');
+      if (result.status === 'rejected') {
+        const conflict = classifyGoldenConflict(result.reason);
+        assert.ok(conflict, 'Conflicto de concurrencia Golden no reconocido');
+        t.diagnostic(JSON.stringify(conflict));
+      }
     }
     const persisted = await snapshot(observer);
     for (const table of tables.filter(name => name !== 'neighborhood')) {
