@@ -8,10 +8,42 @@ const options = (url, extra = {}) => ({
 });
 
 test('seed exige un modo explícito y rechaza datasets todavía no implementados', () => {
-  for (const args of [[], ['catalog'], ['--mode'], ['--mode=volume'],
+  for (const args of [[], ['catalog'], ['--mode'],
     ['--mode=all'], ['--mode=catalog', '--force'], ['--mode=catalog', '--mode=catalog']]) {
     assert.throws(() => validateSeedOptions({ ...options(localUrl), args }), /modo catalog explícito/);
   }
+});
+
+const volumeUrl = 'postgresql://127.0.0.1:55434/urbanfix_seed_cp4_volume_test';
+
+test('Volumen admite solo su destino exclusivo y catálogo, sin cruces con Golden', () => {
+  for (const mode of ['catalog', 'volume']) {
+    assert.deepEqual(validateSeedOptions({ args: [`--mode=${mode}`], env: {
+      URBANFIX_SEED_DATABASE_URL: volumeUrl,
+    } }), { mode, connectionString: volumeUrl });
+  }
+  for (const [mode, url] of [['golden', volumeUrl], ['volume', goldenUrl], ['volume', localUrl],
+    ['volume', volumeUrl.replace('55434', '55433')], ['volume', volumeUrl.replace('127.0.0.1', 'localhost')],
+    ['volume', `${volumeUrl}?schema=public`], ['volume', undefined]]) {
+    assert.throws(() => validateSeedOptions({ args: [`--mode=${mode}`], env: {
+      URBANFIX_SEED_DATABASE_URL: url, DATABASE_URL: volumeUrl,
+    } }), /Destino del seed no autorizado/);
+  }
+  assert.throws(() => validateSeedOptions({ args: ['--mode=volume'], env: {
+    URBANFIX_SEED_DATABASE_URL: volumeUrl, NODE_ENV: 'production',
+  } }));
+});
+
+test('integración Volumen exige guarda y no amplía las parejas ni Golden', () => {
+  const { validateVolumeIntegrationOptions, validateGoldenIntegrationOptions } = require('../prisma/seed/target');
+  const env = { URBANFIX_RUN_SEED_DB_TESTS: '1', URBANFIX_SEED_DATABASE_URL: volumeUrl };
+  assert.deepEqual(validateVolumeIntegrationOptions(env), { connectionString: volumeUrl });
+  for (const invalid of [{ URBANFIX_RUN_SEED_DB_TESTS: '0' }, { URBANFIX_SEED_DATABASE_URL: goldenUrl },
+    { URBANFIX_SEED_DATABASE_URL: undefined, DATABASE_URL: volumeUrl }]) {
+    assert.throws(() => validateVolumeIntegrationOptions({ ...env, ...invalid }));
+  }
+  assert.throws(() => validateGoldenIntegrationOptions(env));
+  assert.throws(() => validateSeedIntegrationOptions({ ...env, URBANFIX_SEED_CONCURRENCY_DATABASE_URL: volumeUrl }));
 });
 
 const goldenUrl = 'postgresql://127.0.0.1:55434/urbanfix_seed_cp3_golden_test';

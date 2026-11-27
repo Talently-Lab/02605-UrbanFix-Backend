@@ -15,6 +15,7 @@ async function runSeed({
   env = process.env,
   readCatalog = () => readFileSync(join(__dirname, '../data/Barrios.csv'), 'utf8'),
   readGolden = () => require('../data/golden').createGoldenDataset(),
+  readVolume = reference => require('../data/volume').createVolumeDataset(reference),
   createClient = createSeedClient,
 } = {}) {
   const { mode, connectionString } = validateSeedOptions({ args, env });
@@ -25,8 +26,16 @@ async function runSeed({
     golden = readGolden();
     require('./golden').validateGoldenDataset(golden);
   }
+  let volume;
+  if (mode === 'volume') {
+    require('../data/volume').volumeReference(env.URBANFIX_SEED_REFERENCE_TIME);
+    volume = readVolume(env.URBANFIX_SEED_REFERENCE_TIME);
+    if (volume?.reference !== env.URBANFIX_SEED_REFERENCE_TIME) throw new Error('Referencia Volumen inconsistente');
+    require('./volume').validateVolumeDataset(volume, csv);
+  }
   const prisma = createClient(connectionString);
   try {
+    if (mode === 'volume') return await require('./volume').seedVolume(prisma, volume, csv);
     return mode === 'golden' ? await require('./golden').seedGolden(prisma, golden, csv) : await seedCatalog(prisma, csv);
   } finally {
     await prisma.$disconnect();
@@ -35,7 +44,7 @@ async function runSeed({
 
 if (require.main === module) {
   runSeed().then(result => {
-    console.log(JSON.stringify({ mode: process.argv[2] === '--mode=golden' ? 'golden' : 'catalog', ...result }));
+    console.log(JSON.stringify({ mode: process.argv[2].slice('--mode='.length), ...result }));
   }).catch(error => {
     const discrepancy = error?.code === 'SEED_CATALOG_DISCREPANCY' &&
       Number.isSafeInteger(error.unexpectedCount) && error.unexpectedCount > 0;

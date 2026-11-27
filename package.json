@@ -8,7 +8,8 @@
     "test": "node --test",
     "seed": "node prisma/seed/run.js",
     "test:seed:integration": "node --test test/seed.integration.test.js",
-    "test:seed:golden:integration": "node --test test/seed.golden.integration.test.js"
+    "test:seed:golden:integration": "node --test test/seed.golden.integration.test.js",
+    "test:seed:volume:integration": "node --test test/seed.volume.integration.test.js"
   },
   "repository": {
     "type": "git",

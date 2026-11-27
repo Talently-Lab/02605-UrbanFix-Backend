@@ -1,4 +1,4 @@
-# Catálogo oficial de barrios y Golden — S4-05 CP2, CP2.1 y CP3
+# Catálogo oficial de barrios, Golden y Volumen — S4-05 CP2 a CP4
 
 El modo `catalog` carga datos oficiales de referencia. Es independiente de los datasets ficticios golden y volumen. Ningún seed se ejecuta al importar sus módulos, iniciar la API o ejecutar migraciones.
 
@@ -14,7 +14,7 @@ Antes de construir el cliente Prisma se comprueban las columnas `id_barrio, Barr
 
 ## Destino y ejecución
 
-El runner exige exactamente `--mode=catalog` o `--mode=golden`. Rechaza argumentos adicionales y los modos volume y all. No lee `.env`, no importa `src/lib/prisma.js` y no usa `DATABASE_URL` como alternativa. Golden solo admite su base exclusiva indicada en la sección CP3; no se habilita sobre los destinos conservados del catálogo.
+El runner exige exactamente `--mode=catalog`, `--mode=golden` o `--mode=volume`. Rechaza argumentos adicionales y el modo all. No lee `.env`, no importa `src/lib/prisma.js` y no usa `DATABASE_URL` como alternativa. Golden y Volumen solo admiten sus respectivas bases exclusivas, sin cruces entre datasets ni escrituras ficticias sobre los destinos conservados del catálogo.
 
 La variable dedicada `URBANFIX_SEED_DATABASE_URL` debe identificar exactamente uno de estos destinos PostgreSQL. La lista explícita está en `prisma/seed/target.js`; no se permiten combinaciones cruzadas de sus puertos y bases.
 
@@ -26,6 +26,7 @@ La variable dedicada `URBANFIX_SEED_DATABASE_URL` debe identificar exactamente u
 | `127.0.0.1` | `55434` | `urbanfix_seed_cp21_test`             | Integración CP2.1: integridad, discrepancias, rollback y persistencia.                              |
 | `127.0.0.1` | `55434` | `urbanfix_seed_cp21_concurrency_test` | Integración CP2.1: cargas concurrentes.                                                             |
 | `127.0.0.1` | `55434` | `urbanfix_seed_cp3_golden_test`       | Integración Golden: preparación y ejecución pendientes de CP5.                                      |
+| `127.0.0.1` | `55434` | `urbanfix_seed_cp4_volume_test`       | Integración Volumen: preparación y ejecución pendientes de CP5.                                     |
 
 Se permiten los protocolos `postgresql` y `postgres` y credenciales locales de prueba. No se admiten otros hosts, puertos, bases, parámetros de conexión, fragmentos, rutas alternativas ni espacios. `NODE_ENV=production` también se rechaza, pero no es la única protección. Mantener un destino en esta lista no autoriza ejecutar comandos sobre él.
 
@@ -427,3 +428,77 @@ Durante S4-06 se revisarán los 64 casos completos del Plan de Pruebas QA V3 con
 Se prestará especial atención a REG-002/012 (unicidad entre roles), REG-004/015/016 (contraseñas y límites), REG-013/014/026 (roles y campos internos), REG-017/033 y LOG-011 (email), REG-018/032 (matrícula), REG-019/021/022 (especialidades, barrios y duplicados), REG-020 (datos sensibles), LOG-010/014 (credenciales y orden de validación), ACC-003/004/007/008 (JWT, expiración, suspensión y HTTP) y CAT-001/002 (catálogos públicos y contenido).
 
 Cada caso se clasificará como: implementado y probado; implementado con cobertura insuficiente; no implementado, pero aprobado y perteneciente al Sprint 4; correspondiente a un sprint posterior; o contradictorio/pendiente de definición funcional. Los requisitos aprobados que realmente falten deberán incorporarse al cierre del Sprint 4, previa autorización y mediante TDD cuando corresponda. No se modifica ahora el Plan QA externo ni se amplía CP3.
+
+## CP4 — Dataset Volumen
+
+### Referencia y contrato reproducible
+
+La fuente es la sección Dataset 2 de Seed v1 del DA, con las reglas aprobadas y las decisiones posteriores. La coherencia referencial y temporal, disponibilidad histórica, especialidades, matrículas, cobertura y autorizaciones son obligatorias. Los porcentajes del DA son objetivos orientativos; no se alteran reglas ni definiciones de indicadores para alcanzarlos.
+
+`prisma/data/volume.js` genera 62 usuarios (45 CLIENT, 15 TECHNICIAN y 2 ADMIN), 15 perfiles, 43 especialidades, 135 coberturas, 200 solicitudes y 240 ofertas. Son 695 registros persistibles en seis tablas; los 48 barrios oficiales son una precondición independiente. Los técnicos incluyen 11 APPROVED/ACTIVE, 2 PENDING/ACTIVE, 1 REJECTED/ACTIVE y 1 APPROVED/SUSPENDED sin ofertas ni trabajos. Hay siete clientes sin solicitudes y 38 con actividad, incluidos los dos clientes de prueba.
+
+La variable dedicada `URBANFIX_SEED_REFERENCE_TIME` es obligatoria para Volumen. Debe ser un instante ISO UTC canónico con milisegundos que corresponda a lunes 00:00 de Buenos Aires (03:00 UTC), por ejemplo `2026-12-07T03:00:00.000Z`. No se toma NOW(), Date.now() ni una referencia implícita. Esta alineación permite cinco semanas completas: 25, 35, 45, 55 y 40 solicitudes, desde D−35 días hasta D−1 hora, con cortes de lunes en Argentina. Los usuarios se crean entre D−42 y D−1 días.
+
+La misma D produce exactamente los mismos UUID, relaciones, fechas, hashes y distribuciones. Cambiar D una semana desplaza las fechas siete días y conserva las identidades; no autoriza reanclar filas existentes: la carga detecta las diferencias y aborta. Una nueva referencia necesita una base nueva autorizada. Se usa un mezclado determinista con semilla fija y una agenda conservadora por técnico. Si no hay capacidad, se desplaza la creación dentro del horario permitido y de la misma semana; las ofertas abiertas reservan capacidad hasta su resolución o vencimiento. T10 participa en los ocho escenarios controlados de liberación por D-029 y luego vuelve al conjunto de asignación general. No hay reintentos de transacciones.
+
+Una calibración final determinista adelanta exactamente nueve aceptaciones de solicitudes maduras limpias COMPLETED, con una sola oferta inicial, a createdAt + 2 h. Se contabiliza el límite mediante <= 2 h, conforme a DA. Conserva las finalizaciones y updatedAt. También define diez rechazos en solicitudes PENDING sin reoferta que antes representaban vencimientos. Las fechas de creación y expiresAt permanecen intactas, con vigencia de 24 h; el ajuste se realiza sobre el fixture antes de persistir, sin modificar ofertas vencidas en la base. El modelo no tiene respondedAt: los tests comprueban un instante posible de rechazo un minuto después de crear la oferta, anterior a su vencimiento y sin trabajo activo. La agenda conservadora original se mantiene, sin introducir dispensas de disponibilidad. Una huella de regresión verifica que el resto de los campos no cambie.
+
+Las tres cuentas de prueba son C44, C45 y T11 de Volumen. Están incluidas en las cantidades anteriores y tienen `isTestUser=true`; las demás tienen `false`. Las diez solicitudes de C44/C45 se dirigen exclusivamente a T11 y están incluidas en las 200. Al excluirlas quedan 190 solicitudes y 230 ofertas. Los emails usan `urbanfix.volume.<código>@example.com`, separados de Golden y de los emails QA reservados. Todos los clientes y técnicos tienen teléfono; ADMIN conserva null. La contraseña pública de prueba local es `UrbanFixVolume2026!`, persistida únicamente como hash bcrypt reproducible de costo 10. No reutilizar estas credenciales fuera del entorno ficticio aislado.
+
+### Distribuciones obtenidas y denominadores
+
+Estos resultados describen el fixture para cualquier D admitida, no crean consultas productivas ni resuelven indicadores pendientes. Para las tasas de madurez se usan las solicitudes de los 35 días con createdAt < D−24 h, excluyendo clientes de prueba, sin excluir moderaciones: n = 188. No es la cohorte de ocho días de los KPIs de Golden. Si se aplica además la variante de exclusión de moderación, la población baja a 183; se conservan ambos tratamientos sin elegir una definición productiva.
+
+| Distribución | Resultado y denominador | Objetivo DA y desviación |
+| --- | --- | --- |
+| Solicitudes por semana | 25/35/45/55/40; total 200 | Coincide con la propuesta |
+| Aceptadas alguna vez, maduras limpias | 137/188 = 72,87 % | 70–75 %; dentro del rango |
+| Aceptadas en hasta 2 h, maduras limpias | 57/188 = 30,32 % | 30–40 %; dentro del rango |
+| Aceptadas en hasta 24 h, maduras limpias | 121/188 = 64,36 % | 60–70 %; dentro del rango |
+| Mediana de espera de aceptadas maduras limpias | 150 minutos; n = 137 aceptadas | Cerca de 2,5 h; coincide |
+| Canceladas antes de aceptar, maduras limpias | 25/188 = 13,30 % | Cerca de 10 %; +3,30 puntos |
+| Autor de esas 25 cancelaciones | 20 CLIENT y 5 ADMIN: 80/20 % | Coincide; cumple al menos cinco de Admin |
+| Canceladas tras aceptar, maduras limpias | 6/188 = 3,19 %, todas por Admin | Cerca de 3 %; +0,19 puntos |
+| PENDING sin asignación y con más de 24 h | 26/188 = 13,83 % | Cerca de 15 %; −1,17 puntos |
+| Solicitudes maduras limpias con reoferta | 40/188 = 21,28 % | Cerca de 20 %; +1,28 puntos; sobre total bruto: 40/200 = 20 % |
+| Ofertas rechazadas limpias | 35/230 = 15,22 % | Cerca de 15 %; +0,22 puntos |
+| Ofertas efectivamente vencidas limpias | 23/230 = 10,00 % | Cerca de 10 %; coincide |
+| PENDING guardadas pero ya vencidas | 4 ofertas | Objetivo 3–5; dentro del rango |
+| Creaciones de lunes a viernes | 171/200 = 85,50 % | Mayor carga en días hábiles; sin porcentaje obligatorio |
+
+Categorías sobre 200 solicitudes brutas: PLUMBING 70 (35 %), ELECTRICITY 50 (25 %), LOCKSMITH 30 (15 %), GAS 30 (15 %) y MASONRY 20 (10 %), sin desviación. Sobre 190 solicitudes limpias son 69, 46, 28, 28 y 19 respectivamente: 36,32 %, 24,21 %, 14,74 %, 14,74 % y 10,00 %. Horarios preferidos brutos: ANY 100/200 (50 %), MORNING 60/200 (30 %), AFTERNOON 40/200 (20 %), sin desviación; limpios: 97/190 (51,05 %), 56/190 (29,47 %) y 37/190 (19,47 %).
+
+Se usan nueve barrios de nueve comunas. Palermo/Caballito/Almagro concentran 100/200 solicitudes (50 %). Todas las creaciones ocurren entre 08:00 y antes de 22:00 de Buenos Aires. Los trabajos completados duran entre 2 h y 25 h 59 min desde acceptedAt, dentro del rango orientativo de 2–48 h; no se fuerza una distribución log-normal exacta.
+
+Estados finales brutos: 138 COMPLETED, 31 CANCELLED, 28 PENDING, 1 ACCEPTED y 2 IN_PROGRESS. En datos limpios: 129 COMPLETED, 31 CANCELLED, 28 PENDING, 1 ACCEPTED y 1 IN_PROGRESS. Las 240 ofertas guardadas son 147 ACCEPTED, 35 REJECTED, 19 EXPIRED, 25 CANCELLED, 8 RELEASED y 6 PENDING. Al excluir prueba, solo cambia ACCEPTED a 137 y el total a 230. Cuatro de las seis PENDING están vencidas en D: el estado efectivo es 23 EXPIRED y dos PENDING vigentes. Sobre las 240 ofertas brutas, los rechazos son 14,58 % y los vencimientos efectivos 9,58 %. Hay 40 reofertas, siempre a un técnico diferente.
+
+`cancellationOrigins` documenta 25 cancelaciones desde PENDING, cuatro desde ACCEPTED y dos excepcionales desde IN_PROGRESS por Admin. Es metadato del escenario y no se persiste: el modelo no registra startedAt ni el estado anterior a la cancelación. No se agrega ese campo ni se afirma poder reconstruir el inicio desde PostgreSQL. Las fechas de aceptación y la asignación se conservan al cancelar después de aceptar.
+
+### Carga, seguridad y ejecución futura
+
+El modo es `--mode=volume`; su único destino es `127.0.0.1:55434/urbanfix_seed_cp4_volume_test`. Admite preparar allí el catálogo mediante `--mode=catalog`. Rechaza Golden y todas las bases conservadas, destinos remotos, puertos cruzados, producción y fallback a DATABASE_URL. Las parejas del catálogo permanecen intactas.
+
+El runner valida referencia, destino, CSV y dataset antes de construir Prisma. `prisma/seed/volume.js` verifica de nuevo la identidad exacta y el esquema public dentro de una transacción Serializable (maxWait 5 s, timeout 10 s). Lee el catálogo y las seis tablas por lotes, verifica todos los registros presentes antes de insertar y resuelve los UUID de barrio existentes. Ejecuta hasta seis createMany en orden referencial. No hay N+1, actualizaciones, borrados, skipDuplicates, adopción de UUID ajenos ni reintentos. Las colisiones se comprueban por UUID, email insensible a mayúsculas, usuario del perfil y claves compuestas. Cargas parciales compatibles insertan solo faltantes; una segunda carga conserva todos los campos y devuelve existing=695, inserted=0, total=695. El runner desconecta también ante fallos y conserva la salida pública sanitizada.
+
+Solo tras autorizar y verificar el entorno en CP5, configurar la conexión dedicada sin imprimirla y proporcionar D explícitamente:
+
+```powershell
+$env:URBANFIX_SEED_REFERENCE_TIME = '2026-12-07T03:00:00.000Z'
+npm.cmd run seed -- --mode=volume
+```
+
+Este comando no se ejecutó en CP4. No crea bases ni tablas, no aplica migraciones y no carga el catálogo automáticamente. Golden no se modifica ni se mezcla con Volumen. No se incorporan F01–F12, telemetría ni funcionalidades de Sprints 5/6. No ejecutar datasets ficticios en producción.
+
+### Verificación CP4 y pendiente CP5
+
+TDD por bloques: guardas, generación/validación y carga transaccional. Las pruebas específicas con mocks comprueban referencia explícita, reproducción/desplazamiento, cantidades y flags, resultados descriptivos, integridad referencial/temporal, disponibilidad histórica, liberaciones, colisiones, cargas parciales, preservación, rollback por cada tabla o commit, idempotencia y ausencia de N+1.
+
+Resultados locales tras la calibración de CP4: 12 tests específicos de Volumen aprobados. La suite segura, con `URBANFIX_RUN_DB_TESTS=0` y `URBANFIX_RUN_SEED_DB_TESTS=0`, obtuvo 279 tests: 273 aprobados, cero fallidos y seis omitidos exclusivamente por sus guardas PostgreSQL. Se comprobaron la sintaxis de los dos archivos JavaScript ajustados, `git diff --check` y el diff del ajuste. En la implementación inicial también se habían verificado los otros archivos afectados por CP4. La calibración solo modifica el generador, sus tests y esta documentación. Golden, esquema, migraciones y código de la API permanecen sin cambios. No hay comandos de lint, type checking ni build definidos en el proyecto.
+
+`test/seed.volume.integration.test.js` está preparado, no ejecutado. Requiere guarda de integración activa, conexión exclusiva, D explícita, cinco migraciones aplicadas, Prisma Client sincronizado, catálogo oficial completo y seis tablas ficticias vacías. Prepara rollback real, preservación de un usuario ajeno, colisiones, primera carga con commit, segunda transacción independiente, rechazo de otra D y verificaciones SQL de flags, elegibilidad, solapamientos y vigencias. Conserva los commits para inspección; no borra ni limpia registros.
+
+```text
+npm.cmd run test:seed:volume:integration
+```
+
+La creación y utilización de la nueva base, snapshots de las bases conservadas y la ejecución conjunta de Golden/Volumen quedan para CP5 con autorización específica. No se ejecutaron operaciones sobre PostgreSQL, Docker, Neon o Render, ni migraciones o seeds. Las pruebas seguras deshabilitan ambas guardas de integración; las comprobaciones reales de PostgreSQL permanecen pendientes y no se afirma RED/GREEN sobre ellas.
