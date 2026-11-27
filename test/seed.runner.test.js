@@ -12,6 +12,45 @@ const catalog = validateCatalogCsv(csv);
 const env = { URBANFIX_SEED_DATABASE_URL: 'postgresql://127.0.0.1:55432/urbanfix_s3_test' };
 const args = ['--mode=catalog'];
 
+test('runner Golden valida el dataset antes del cliente y no carga el catálogo automáticamente', async () => {
+  const { createGoldenDataset } = require('../prisma/data/golden');
+  const data = createGoldenDataset();
+  const invalid = structuredClone(data);
+  invalid.user.pop();
+  let clients = 0;
+  await assert.rejects(runSeed({ args: ['--mode=golden'], env: {
+    URBANFIX_SEED_DATABASE_URL: 'postgresql://127.0.0.1:55434/urbanfix_seed_cp3_golden_test',
+  }, readCatalog: () => csv, readGolden: () => invalid, createClient: () => { clients++; } }), /Golden inválido/);
+  assert.equal(clients, 0);
+});
+
+test('runner Golden despacha el modo, escribe solo Golden y desconecta también ante fallos', async () => {
+  const data = require('../prisma/data/golden').createGoldenDataset();
+  for (const fail of [false, true]) {
+    let disconnected = false;
+    const writes = [];
+    const client = { $disconnect: async () => { disconnected = true; },
+      $transaction: async callback => {
+        const tx = { $queryRaw: async () => [{ database: 'urbanfix_seed_cp3_golden_test', schema: 'public' }],
+          neighborhood: { findMany: async () => catalog.map((row, i) => ({ ...row, id: String(i) })) } };
+        for (const table of ['user', 'technician', 'technicianSpecialty', 'technicianNeighborhood', 'serviceRequest', 'serviceOffer']) {
+          tx[table] = { findMany: async () => [], createMany: async () => {
+            writes.push(table);
+            if (fail) throw new Error('Golden transaction failure');
+          } };
+        }
+        return callback(tx);
+      } };
+    const operation = runSeed({ args: ['--mode=golden'], env: {
+      URBANFIX_SEED_DATABASE_URL: 'postgresql://127.0.0.1:55434/urbanfix_seed_cp3_golden_test',
+    }, readCatalog: () => csv, readGolden: () => data, createClient: () => client });
+    if (fail) await assert.rejects(operation, /Golden transaction failure/);
+    else assert.deepEqual(await operation, { existing: 0, inserted: 96, total: 96 });
+    assert.equal(disconnected, true);
+    assert.equal(writes.includes('neighborhood'), false);
+  }
+});
+
 function mockClient(events, failure) {
   return {
     $transaction: async callback => {

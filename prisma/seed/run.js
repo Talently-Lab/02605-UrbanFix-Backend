@@ -14,14 +14,20 @@ async function runSeed({
   args = process.argv.slice(2),
   env = process.env,
   readCatalog = () => readFileSync(join(__dirname, '../data/Barrios.csv'), 'utf8'),
+  readGolden = () => require('../data/golden').createGoldenDataset(),
   createClient = createSeedClient,
 } = {}) {
-  const { connectionString } = validateSeedOptions({ args, env });
+  const { mode, connectionString } = validateSeedOptions({ args, env });
   const csv = readCatalog();
   validateCatalogCsv(csv);
+  let golden;
+  if (mode === 'golden') {
+    golden = readGolden();
+    require('./golden').validateGoldenDataset(golden);
+  }
   const prisma = createClient(connectionString);
   try {
-    return await seedCatalog(prisma, csv);
+    return mode === 'golden' ? await require('./golden').seedGolden(prisma, golden, csv) : await seedCatalog(prisma, csv);
   } finally {
     await prisma.$disconnect();
   }
@@ -29,7 +35,7 @@ async function runSeed({
 
 if (require.main === module) {
   runSeed().then(result => {
-    console.log(JSON.stringify({ mode: 'catalog', ...result }));
+    console.log(JSON.stringify({ mode: process.argv[2] === '--mode=golden' ? 'golden' : 'catalog', ...result }));
   }).catch(error => {
     const discrepancy = error?.code === 'SEED_CATALOG_DISCREPANCY' &&
       Number.isSafeInteger(error.unexpectedCount) && error.unexpectedCount > 0;

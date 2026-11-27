@@ -1,4 +1,6 @@
+const GOLDEN_DATABASE = 'urbanfix_seed_cp3_golden_test';
 const SEED_TARGETS = Object.freeze({
+  [GOLDEN_DATABASE]: '55434',
   urbanfix_s3_test: '55432',
   urbanfix_seed_test: '55433',
   urbanfix_seed_concurrency_test: '55433',
@@ -7,9 +9,10 @@ const SEED_TARGETS = Object.freeze({
 });
 
 function validateSeedOptions({ args, env }) {
-  if (!Array.isArray(args) || args.length !== 1 || args[0] !== '--mode=catalog') {
-    throw new Error('Se requiere modo catalog explícito: --mode=catalog');
+  if (!Array.isArray(args) || args.length !== 1 || !['--mode=catalog', '--mode=golden'].includes(args[0])) {
+    throw new Error('Se requiere modo catalog explícito o modo golden explícito');
   }
+  const mode = args[0].slice('--mode='.length);
   const connectionString = env.URBANFIX_SEED_DATABASE_URL;
   const production = typeof env.NODE_ENV === 'string' && env.NODE_ENV.trim().toLowerCase() === 'production';
   try {
@@ -22,13 +25,22 @@ function validateSeedOptions({ args, env }) {
     decodeURIComponent(url.password);
     const database = url.pathname.slice(1);
     if (url.hostname !== '127.0.0.1' || !Object.hasOwn(SEED_TARGETS, database) ||
-        url.port !== SEED_TARGETS[database] || url.search || url.hash) {
+        url.port !== SEED_TARGETS[database] || url.search || url.hash ||
+        (mode === 'golden' && database !== GOLDEN_DATABASE)) {
       throw new Error();
     }
   } catch {
     throw new Error('Destino del seed no autorizado');
   }
-  return { mode: 'catalog', connectionString };
+  return { mode, connectionString };
+}
+
+function validateGoldenIntegrationOptions(env) {
+  if (env.URBANFIX_RUN_SEED_DB_TESTS !== '1') {
+    throw new Error('Integración Golden no autorizada');
+  }
+  const { connectionString } = validateSeedOptions({ args: ['--mode=golden'], env });
+  return { connectionString };
 }
 
 function validateSeedIntegrationOptions(env) {
@@ -54,4 +66,5 @@ function validateSeedIntegrationOptions(env) {
   }
 }
 
-module.exports = { SEED_TARGETS, validateSeedOptions, validateSeedIntegrationOptions };
+module.exports = { SEED_TARGETS, GOLDEN_DATABASE, validateSeedOptions,
+  validateSeedIntegrationOptions, validateGoldenIntegrationOptions };

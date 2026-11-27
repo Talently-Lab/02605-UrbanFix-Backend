@@ -7,11 +7,51 @@ const options = (url, extra = {}) => ({
   args: ['--mode=catalog'], env: { URBANFIX_SEED_DATABASE_URL: url, ...extra },
 });
 
-test('seed exige modo catalog explícito y rechaza datasets todavía no implementados', () => {
-  for (const args of [[], ['catalog'], ['--mode'], ['--mode=golden'], ['--mode=volume'],
+test('seed exige un modo explícito y rechaza datasets todavía no implementados', () => {
+  for (const args of [[], ['catalog'], ['--mode'], ['--mode=volume'],
     ['--mode=all'], ['--mode=catalog', '--force'], ['--mode=catalog', '--mode=catalog']]) {
     assert.throws(() => validateSeedOptions({ ...options(localUrl), args }), /modo catalog explícito/);
   }
+});
+
+const goldenUrl = 'postgresql://127.0.0.1:55434/urbanfix_seed_cp3_golden_test';
+
+test('Golden solo admite su base exclusiva y permite preparar allí el catálogo', () => {
+  for (const mode of ['catalog', 'golden']) {
+    for (const url of [goldenUrl, goldenUrl.replace('postgresql:', 'postgres:')]) {
+      assert.deepEqual(validateSeedOptions({ args: [`--mode=${mode}`],
+        env: { URBANFIX_SEED_DATABASE_URL: url } }), { mode, connectionString: url });
+    }
+  }
+});
+
+test('Golden rechaza bases conservadas, puertos cruzados, producción y fallback', () => {
+  for (const url of [localUrl,
+    'postgresql://127.0.0.1:55433/urbanfix_seed_test',
+    'postgresql://127.0.0.1:55434/urbanfix_seed_cp21_test',
+    goldenUrl.replace('55434', '55433'), goldenUrl.replace('55434', '55432'),
+    goldenUrl.replace('127.0.0.1', 'localhost'), `${goldenUrl}?schema=public`,
+    `${goldenUrl}#fragment`, `${goldenUrl}/`, undefined]) {
+    assert.throws(() => validateSeedOptions({ args: ['--mode=golden'], env: {
+      URBANFIX_SEED_DATABASE_URL: url, DATABASE_URL: goldenUrl,
+    } }), /Destino del seed no autorizado/);
+  }
+  assert.throws(() => validateSeedOptions({ args: ['--mode=golden'], env: {
+    URBANFIX_SEED_DATABASE_URL: goldenUrl, NODE_ENV: 'production',
+  } }), /Destino del seed no autorizado/);
+});
+
+test('integración Golden exige guarda y destino exclusivo sin ampliar las parejas del catálogo', () => {
+  const { validateGoldenIntegrationOptions } = require('../prisma/seed/target');
+  const env = { URBANFIX_RUN_SEED_DB_TESTS: '1', URBANFIX_SEED_DATABASE_URL: goldenUrl };
+  assert.deepEqual(validateGoldenIntegrationOptions(env), { connectionString: goldenUrl });
+  for (const invalid of [{ URBANFIX_RUN_SEED_DB_TESTS: '0' },
+    { URBANFIX_RUN_SEED_DB_TESTS: undefined }, { URBANFIX_SEED_DATABASE_URL: localUrl },
+    { URBANFIX_SEED_DATABASE_URL: undefined, DATABASE_URL: goldenUrl }]) {
+    assert.throws(() => validateGoldenIntegrationOptions({ ...env, ...invalid }));
+  }
+  assert.throws(() => validateSeedIntegrationOptions({ ...env,
+    URBANFIX_SEED_CONCURRENCY_DATABASE_URL: goldenUrl }));
 });
 
 test('seed conserva el destino local previo con conexión dedicada', () => {

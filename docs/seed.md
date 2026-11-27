@@ -1,4 +1,4 @@
-# Catálogo oficial de barrios — S4-05 CP2 y CP2.1
+# Catálogo oficial de barrios y Golden — S4-05 CP2, CP2.1 y CP3
 
 El modo `catalog` carga datos oficiales de referencia. Es independiente de los datasets ficticios golden y volumen. Ningún seed se ejecuta al importar sus módulos, iniciar la API o ejecutar migraciones.
 
@@ -14,7 +14,7 @@ Antes de construir el cliente Prisma se comprueban las columnas `id_barrio, Barr
 
 ## Destino y ejecución
 
-El runner exige exactamente `--mode=catalog`. Rechaza argumentos adicionales y los modos golden, volume y all. No lee `.env`, no importa `src/lib/prisma.js` y no usa `DATABASE_URL` como alternativa.
+El runner exige exactamente `--mode=catalog` o `--mode=golden`. Rechaza argumentos adicionales y los modos volume y all. No lee `.env`, no importa `src/lib/prisma.js` y no usa `DATABASE_URL` como alternativa. Golden solo admite su base exclusiva indicada en la sección CP3; no se habilita sobre los destinos conservados del catálogo.
 
 La variable dedicada `URBANFIX_SEED_DATABASE_URL` debe identificar exactamente uno de estos destinos PostgreSQL. La lista explícita está en `prisma/seed/target.js`; no se permiten combinaciones cruzadas de sus puertos y bases.
 
@@ -25,6 +25,7 @@ La variable dedicada `URBANFIX_SEED_DATABASE_URL` debe identificar exactamente u
 | `127.0.0.1` | `55433` | `urbanfix_seed_concurrency_test`      | Integración CP2: cargas concurrentes.                                                               |
 | `127.0.0.1` | `55434` | `urbanfix_seed_cp21_test`             | Integración CP2.1: integridad, discrepancias, rollback y persistencia.                              |
 | `127.0.0.1` | `55434` | `urbanfix_seed_cp21_concurrency_test` | Integración CP2.1: cargas concurrentes.                                                             |
+| `127.0.0.1` | `55434` | `urbanfix_seed_cp3_golden_test`       | Integración Golden: preparación y ejecución pendientes de CP5.                                      |
 
 Se permiten los protocolos `postgresql` y `postgres` y credenciales locales de prueba. No se admiten otros hosts, puertos, bases, parámetros de conexión, fragmentos, rutas alternativas ni espacios. `NODE_ENV=production` también se rechaza, pero no es la única protección. Mantener un destino en esta lista no autoriza ejecutar comandos sobre él.
 
@@ -355,3 +356,74 @@ Remove-Item Env:URBANFIX_SEED_CONCURRENCY_DATABASE_URL -ErrorAction SilentlyCont
 En Windows se usa `npm.cmd` para ejecutar el launcher disponible sin depender de la política de ejecución de `npm.ps1`. No es necesario modificar esa política.
 
 No se añadieron dependencias. El proyecto no define comandos de lint, type checking ni build. La comprobación de sintaxis de JavaScript se realiza con `node --check`; la revisión de espacios y cambios, con `git diff --check` y `git status`.
+
+## CP3 — Golden
+
+### Contrato y datos
+
+Fuente funcional: `UrbanFix_-_Escenarios_de_datos_ficticios_para_mtricas_y_Data_QA_Seed_v1.md` del DA, contrastada con la matriz de reglas aprobadas, el catálogo v0.5, las decisiones posteriores y QA V3. La matriz y las decisiones confirmadas tienen prioridad sobre propuestas o texto desactualizado de los demás documentos.
+
+`prisma/data/golden.js` define 17 usuarios (A1, C1–C7 y T1–T9), 9 perfiles técnicos, 13 especialidades, 19 coberturas, 18 solicitudes (G01–G18) y 20 ofertas (O01–O20). Los UUID son explícitos y estables. Los sufijos numéricos de los UUID de solicitudes y ofertas corresponden a sus códigos G/O. El total insertable es 96 registros en seis tablas; el catálogo de 48 barrios permanece independiente.
+
+La referencia fija es `R = 2026-12-07T15:00:00.000Z`. Golden usa fechas absolutas UTC con milisegundos, incluido `updatedAt`, sin depender del reloj de ejecución. Las fechas futuras respecto de R están prohibidas para hechos ocurridos; `expiresAt` es un plazo y puede ser posterior: O14 vence el 08/12 a las 10:00 UTC. Las consultas de comprobación usan R en lugar de NOW(); no se modifica el reloj de la aplicación. Volumen no está implementado en CP3 y utilizará fechas relativas por separado.
+
+C7 y T9 tienen `isTestUser=true`; los otros 15 usuarios simulan tráfico real y tienen `false`. G18/O20 se persisten, pero se excluyen de los resultados analíticos de datos limpios, que conservan las 17 solicitudes y 19 ofertas originales. ADMIN mantiene teléfono nulo; CLIENT y TECHNICIAN tienen teléfono obligatorio. La indicación antigua de teléfono nulo para TECHNICIAN en Seed v1 y QA V3 no se aplica.
+
+Los emails ficticios usan exclusivamente `urbanfix.golden.<código>@example.com`, sin ocupar los emails reservados en los casos QA. Las contraseñas son únicamente de prueba local: `UrbanFixGolden2026!`, almacenada como hash bcrypt de costo 10 reproducible, sin contraseñas en claro en las tablas ni en las salidas. `lastLoginAt` queda nulo. Las direcciones, teléfonos y matrículas son ficticios. T6–T8 reciben una cobertura auxiliar en Palermo para completar sus perfiles; sus estados no operativos se conservan, sin cambiar los resultados DA.
+
+### Resultados de referencia y diferencias documentales
+
+Se conservan las dos variantes explícitas de moderación de Seed v1, sin aprobar una definición de indicador por implementar el seed:
+
+| Comprobación   | Con exclusión de moderación | Sin exclusión |
+| -------------- | --------------------------- | ------------- |
+| Cohorte madura | 13                          | 14            |
+| KPI 1          | 76,92 %                     | 71,43 %       |
+| Liquidez 2 h   | 30,77 %                     | 28,57 %       |
+| Liquidez 24 h  | 69,23 %                     | 64,29 %       |
+
+La mediana es 150,5 minutos y el P90, 1451,1 minutos. La demanda reciente es 15, los técnicos activos del resultado DA son 5 y el ratio es 3,00. La tabla DA de respuesta de ofertas se conserva como 10 ACCEPTED de 13 ofertas elegibles, 76,92 %. Los tests verifican también los desgloses de demanda por categoría, barrio, horario y estado de Semana 5, sin agregar consultas productivas ni modificar indicadores.
+
+Seed v1 presenta una contradicción en KPI 3: su tabla de resultados cuenta a T4 por el rechazo O06 y espera cinco técnicos; una nota final indica contar solo aceptaciones. Los documentos aportados de Métricas Core y Arquitectura son v2, aunque Seed v1 referencia v3. Se preserva expresamente el resultado Golden de cinco técnicos y no se adopta la consulta antigua ni se resuelve la definición productiva. G16 permanece en el dataset para verificar ambas variantes de moderación.
+
+F01–F12 de Semana 5 son una propuesta de telemetría con captura pendiente, fuera de este seed transaccional. No se agregan AnalyticsEvent, respondedAt, startedAt ni escenarios de suspensión con trabajos activos.
+
+### Carga y seguridad
+
+El único destino Golden es `127.0.0.1:55434/urbanfix_seed_cp3_golden_test`, con protocolos `postgresql` o `postgres` y conexión dedicada en `URBANFIX_SEED_DATABASE_URL`. También se admite allí `--mode=catalog` exclusivamente para preparar el catálogo independiente. Las parejas de integración CP2 y CP2.1 conservan sus restricciones anteriores. Golden rechaza las bases conservadas, producción, destinos remotos, puertos cruzados, parámetros y el fallback a `DATABASE_URL`.
+
+Antes de construir Prisma se validan modo, destino, CSV y dataset. La validación Golden comprueba cantidades, identidades, referencias, roles, teléfonos, matrículas, cobertura, estados y coherencia temporal. Comprueba que no haya trabajos superpuestos ni ofertas emitidas durante un trabajo activo y conserva el caso PENDING ya vencido O11. La ausencia de startedAt impide reconstruir el instante de inicio de trabajos; no se inventa ese hecho.
+
+`prisma/seed/golden.js` utiliza una transacción `Serializable` con espera máxima de 5 segundos y duración máxima de 10 segundos. Verifica la identidad exacta de la base y el esquema public, lee y verifica los 48 barrios oficiales, y resuelve sus UUID existentes. Después realiza una lectura por cada una de las seis tablas y prepara todos los lotes antes de escribir. Inserta usuarios, técnicos, especialidades, coberturas, solicitudes y ofertas, en ese orden, con hasta un `createMany` por tabla. No hay consultas por registro, actualizaciones, borrados, `skipDuplicates` ni reintentos automáticos.
+
+Una carga parcial compatible inserta solo los faltantes. Los registros ya presentes deben coincidir en todos los campos persistidos; una colisión de UUID, email sin distinguir mayúsculas, perfil técnico o clave compuesta aborta sin modificar datos. No se adopta una identidad diferente por coincidir el email. Los registros ajenos se conservan. Una segunda carga informa `existing=96`, `inserted=0`, `total=96`, sin ejecutar INSERT. La salida contiene solo modo y cantidades; los fallos usan el error público sanitizado del runner.
+
+Solo después de autorizar y verificar el entorno aislado correspondiente:
+
+```text
+npm.cmd run seed -- --mode=golden
+```
+
+Este comando no fue ejecutado durante CP3. No crea infraestructura, aplica migraciones ni carga el catálogo automáticamente. No ejecutar datasets ficticios en producción.
+
+### Pruebas ejecutadas y pendientes
+
+Se aplicó TDD por bloques de contrato/seguridad, validación del dataset y carga transaccional. Los tests con `node:test` y mocks cubren el contrato DA, sus resultados con R fijo, las guardas, lotes, cargas parciales, colisiones, preservación de identidades y datos ajenos, idempotencia y rollback simulado ante fallos en cada tabla o en el commit. Los 35 tests específicos quedaron aprobados. La suite segura, ejecutada con `URBANFIX_RUN_DB_TESTS=0` y `URBANFIX_RUN_SEED_DB_TESTS=0`, obtuvo 264 tests: 259 aprobados, cero fallidos y cinco omitidos intencionalmente. Las pruebas PostgreSQL permanecen pendientes de CP5; no se afirma RED/GREEN sobre PostgreSQL real. La sintaxis de los ocho archivos JavaScript creados o modificados y `git diff --check` también se verificaron satisfactoriamente.
+
+`test/seed.golden.integration.test.js` queda preparado para CP5 y no fue ejecutado. Su comando específico es:
+
+```text
+npm.cmd run test:seed:golden:integration
+```
+
+Requiere `URBANFIX_RUN_SEED_DB_TESTS=1`, la conexión dedicada al destino Golden, las cinco migraciones aplicadas, Prisma Client sincronizado, catálogo oficial completo y las seis tablas ficticias inicialmente vacías. Valida la guarda antes de construir clientes. Prepara rollback real, conservación de un usuario ajeno, rechazo de colisiones, concurrencia, persistencia con commits independientes, comparación completa de registros y comprobaciones SQL de cohortes y percentiles. Solo admite P2034 como conflicto de serialización esperado en concurrencia; otros errores se informan, sin reintentos.
+
+La preparación y ejecución reales de Golden y Volumen se agrupan en CP5, previa autorización. La propuesta es crear una nueva base exclusiva dentro del contenedor CP2.1 existente, sin otro contenedor. Antes de escribir se verificarán destino, recursos y aislamiento, y se capturarán snapshots de solo lectura de todas las bases conservadas para compararlos al finalizar. La creación de la base y su utilización no están autorizadas por la implementación de CP3. No se ejecutaron operaciones PostgreSQL, Docker, Neon ni Render.
+
+### Criterio obligatorio de cierre S4-06 — QA V3
+
+Durante S4-06 se revisarán los 64 casos completos del Plan de Pruebas QA V3 contra código, restricciones de base de datos, aserciones efectivas de los tests y reglas de negocio aprobadas. Esta revisión no se ejecuta en CP3. La existencia de tests generales no acredita cobertura de un caso y no se duplicarán pruebas que ya cubran efectivamente el requisito.
+
+Se prestará especial atención a REG-002/012 (unicidad entre roles), REG-004/015/016 (contraseñas y límites), REG-013/014/026 (roles y campos internos), REG-017/033 y LOG-011 (email), REG-018/032 (matrícula), REG-019/021/022 (especialidades, barrios y duplicados), REG-020 (datos sensibles), LOG-010/014 (credenciales y orden de validación), ACC-003/004/007/008 (JWT, expiración, suspensión y HTTP) y CAT-001/002 (catálogos públicos y contenido).
+
+Cada caso se clasificará como: implementado y probado; implementado con cobertura insuficiente; no implementado, pero aprobado y perteneciente al Sprint 4; correspondiente a un sprint posterior; o contradictorio/pendiente de definición funcional. Los requisitos aprobados que realmente falten deberán incorporarse al cierre del Sprint 4, previa autorización y mediante TDD cuando corresponda. No se modifica ahora el Plan QA externo ni se amplía CP3.
