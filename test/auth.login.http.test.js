@@ -187,7 +187,7 @@ test('HTTP registro TECHNICIAN rechaza teléfono ausente o inválido con RFC 945
     assert.deepEqual(await response.json(), {
       type: '/problems/validation-error', title: 'Datos inválidos', status: 400,
       detail: 'Revisá los campos indicados.',
-      errors: [{ field: 'phone', detail: 'Teléfono internacional obligatorio' }],
+      errors: [{ field: 'phone', detail: 'Teléfono argentino obligatorio en formato internacional' }],
     });
   }
 });

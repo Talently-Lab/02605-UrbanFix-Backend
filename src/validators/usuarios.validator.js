@@ -1,3 +1,5 @@
+const { isArgentinePhone } = require('./phone.validator');
+
 function validateProfilePatch(input, role) {
   const errors = [];
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
@@ -16,8 +18,8 @@ function validateProfilePatch(input, role) {
       errors.push({ field: 'name', detail: 'El campo name es obligatorio' });
     }
     if (role === 'CLIENT' && Object.hasOwn(input, 'phone') &&
-        (typeof input.phone !== 'string' || !/^\+[1-9][0-9]{1,14}$/.test(input.phone))) {
-      errors.push({ field: 'phone', detail: 'Teléfono internacional obligatorio' });
+        (typeof input.phone !== 'string' || !isArgentinePhone(input.phone))) {
+      errors.push({ field: 'phone', detail: 'Teléfono argentino obligatorio en formato internacional' });
     }
   }
   if (errors.length) {

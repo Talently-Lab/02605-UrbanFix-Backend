@@ -112,7 +112,7 @@ test('rechaza el registro público de ADMIN', () => {
 });
 
 for (const role of ['CLIENT', 'TECHNICIAN']) {
-  test(`${role} exige teléfono internacional y acepta los límites de 2 y 15 dígitos`, () => {
+  test(`${role} exige telefono argentino fijo o movil en formato internacional`, () => {
     const input = {
       name: 'Cliente',
       email: 'cliente@example.com',
@@ -130,11 +130,11 @@ for (const role of ['CLIENT', 'TECHNICIAN']) {
         error.errors[0].field === 'phone',
     );
 
-    for (const phone of ['+12', '+123456789012345', '+5491123456789']) {
+    for (const phone of ['+541143216543', '+5491164004700', '+5491123456789']) {
       assert.doesNotThrow(() => validateRegistration({ ...input, phone }));
     }
 
-    for (const phone of [null, 12345678, false, {}, [], '', ' ', '+', '+1',
+    for (const phone of ['+12', '+123456789012345', null, 12345678, false, {}, [], '', ' ', '+', '+1',
       '+1234567890123456', '+012', '12345678', '005491123456789',
       '+54 91123456789', '+54-91123456789', '+54(911)23456789',
       ' +5491123456789', '+5491123456789 ', '+5491123456789\n',

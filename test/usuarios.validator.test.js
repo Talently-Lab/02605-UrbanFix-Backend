@@ -45,12 +45,12 @@ for (const role of ['CLIENT', 'TECHNICIAN', 'ADMIN']) {
   });
 }
 
-test('PATCH CLIENT conserva formato y límites de teléfono del registro', () => {
-  for (const phone of ['+12', '+123456789012345', '+5491123456789']) {
+test('PATCH CLIENT valida telefono argentino como en el registro', () => {
+  for (const phone of ['+541143216543', '+5491164004700', '+5491123456789']) {
     assert.deepEqual(validateProfilePatch({ phone }, 'CLIENT'), { phone });
     assert.deepEqual(validateProfilePatch({ name: 'Ana', phone }, 'CLIENT'), { name: 'Ana', phone });
   }
-  for (const phone of [undefined, null, 12345678, false, {}, [], '', ' ', '+', '+1',
+  for (const phone of [undefined, '+12', '+123456789012345', null, 12345678, false, {}, [], '', ' ', '+', '+1',
     '+1234567890123456', '+012', '12345678', '005491123456789',
     '+54 91123456789', '+54-91123456789', '+54(911)23456789',
     ' +5491123456789', '+5491123456789 ', '+5491123456789\n',

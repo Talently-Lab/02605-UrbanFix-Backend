@@ -93,7 +93,7 @@ test('CORS conserva encabezados en respuestas 400, 401, 403, 404, 409 y 500', as
     ['/api/admin/usuarios', { headers: { Authorization: `Bearer ${token}` } }, 403],
     ['/api/unknown', {}, 404],
     ['/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'Ana', email: 'ana@example.test', password: 'password123', role: 'CLIENT', phone: '+12' }) }, 409],
+      body: JSON.stringify({ name: 'Ana', email: 'ana@example.test', password: 'password123', role: 'CLIENT', phone: '+541143216543' }) }, 409],
     ['/api/barrios', {}, 500],
   ]) {
     const response = await request(path, options);

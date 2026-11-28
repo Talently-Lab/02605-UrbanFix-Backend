@@ -122,14 +122,14 @@ test('HTTP PATCH JSON malformado conserva RFC 9457 y no escribe', async t => {
 
 test('HTTP PATCH usa el rol persistido aunque el JWT tenga otro rol permitido', async t => {
   const { request, writes } = await setup(t, { role: 'TECHNICIAN' });
-  const denied = await request('PATCH', { name: 'Nuevo', phone: '+12' }, `Bearer ${sign({ role: 'CLIENT' })}`);
+  const denied = await request('PATCH', { name: 'Nuevo', phone: '+541143216543' }, `Bearer ${sign({ role: 'CLIENT' })}`);
   assert.equal(denied.status, 400);
   assert.deepEqual((await denied.json()).errors, [{ field: 'phone', detail: 'Campo no permitido.' }]);
   assert.deepEqual(writes, []);
   const client = await setup(t, { role: 'CLIENT' });
-  const allowed = await client.request('PATCH', { phone: '+12' }, `Bearer ${sign({ role: 'ADMIN' })}`);
+  const allowed = await client.request('PATCH', { phone: '+541143216543' }, `Bearer ${sign({ role: 'ADMIN' })}`);
   assert.equal(allowed.status, 200);
-  assert.equal((await allowed.json()).phone, '+12');
+  assert.equal((await allowed.json()).phone, '+541143216543');
 });
 
 test('HTTP GET conserva null y booleanos del contrato', async t => {
@@ -175,7 +175,7 @@ for (const [label, method, options, operation] of [
 test('HTTP PATCH CLIENT edita teléfono solo y junto con nombre conservando los demás valores', async t => {
   const { request, account } = await setup(t);
   const before = expectedProfile(account);
-  for (const input of [{ phone: '+12' }, { name: 'Nuevo nombre', phone: '+123456789012345' }]) {
+  for (const input of [{ phone: '+541143216543' }, { name: 'Nuevo nombre', phone: '+5491164004700' }]) {
     const response = await request('PATCH', input);
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { ...before, ...input });
@@ -229,7 +229,7 @@ for (const [concurrentStatus, status, type] of [
   test(`HTTP PATCH evita cambios ante ${concurrentStatus} concurrente y devuelve ${status}`, async t => {
     const { request, account, queries, writes } = await setup(t, { concurrentStatus });
     const before = { name: account.name, phone: account.phone };
-    const response = await request('PATCH', { name: 'Nuevo', phone: '+12' });
+    const response = await request('PATCH', { name: 'Nuevo', phone: '+541143216543' });
     assert.equal(response.status, status);
     assert.match(response.headers.get('content-type'), /^application\/problem\+json\b/);
     const body = await response.json();

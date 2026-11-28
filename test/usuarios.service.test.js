@@ -33,7 +33,7 @@ for (const role of ['CLIENT', 'TECHNICIAN', 'ADMIN']) {
 test('GET propio conserva la fecha de login y no realiza escrituras', async () => {
   const lastLoginAt = new Date('2026-11-25T12:00:00.123Z');
   const prisma = { user: { findUnique: async () => ({
-    id: userId, name: 'Ana', email: 'ana@example.test', phone: '+12', role: 'CLIENT',
+    id: userId, name: 'Ana', email: 'ana@example.test', phone: '+541143216543', role: 'CLIENT',
     accountStatus: 'ACTIVE', lastLoginAt, isTestUser: true, technician: null,
   }) } };
   const profile = await getOwnProfile(userId, { prisma });
@@ -80,7 +80,7 @@ for (const role of ['CLIENT', 'TECHNICIAN', 'ADMIN']) {
   test(`PATCH ${role} no consulta ni escribe ante payload inválido o mixto`, async () => {
     const user = { id: userId, role, accountStatus: 'ACTIVE' };
     for (const input of [{}, null, [], { name: ' ' }, { name: 'Nuevo', email: 'private-email' },
-      { name: 'Nuevo', id: 'another-user' }, { name: 'Nuevo', phone: role === 'CLIENT' ? null : '+12' }]) {
+      { name: 'Nuevo', id: 'another-user' }, { name: 'Nuevo', phone: role === 'CLIENT' ? null : '+541143216543' }]) {
       await assert.rejects(updateOwnProfile(input, user, { prisma: null }),
         error => error.status === 400 && error.type === '/problems/validation-error');
     }
@@ -88,7 +88,7 @@ for (const role of ['CLIENT', 'TECHNICIAN', 'ADMIN']) {
 }
 
 test('PATCH CLIENT actualiza teléfono solo o junto con nombre sin tocar campos omitidos', async () => {
-  for (const input of [{ phone: '+12' }, { name: 'Nuevo', phone: '+123456789012345' }]) {
+  for (const input of [{ phone: '+541143216543' }, { name: 'Nuevo', phone: '+5491164004700' }]) {
     const user = { id: userId, role: 'CLIENT', accountStatus: 'ACTIVE' };
     const saved = { ...user, name: 'Anterior', email: 'ana@example.test', phone: '+5491123456789',
       technician: null, lastLoginAt: null, isTestUser: false };

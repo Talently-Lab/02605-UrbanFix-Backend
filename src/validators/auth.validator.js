@@ -1,3 +1,5 @@
+const { isArgentinePhone } = require('./phone.validator');
+
 function validationError(message, field, detail = message) {
   const error = new Error(message);
   error.status = 400;
@@ -49,9 +51,9 @@ function validateRegistration(input) {
 
   if (
     typeof input.phone !== 'string' ||
-    !/^\+[1-9][0-9]{1,14}$/.test(input.phone)
+    !isArgentinePhone(input.phone)
   ) {
-    throw validationError('Teléfono internacional obligatorio', 'phone');
+    throw validationError('Teléfono argentino obligatorio en formato internacional', 'phone');
   }
 
   if (input.role === 'TECHNICIAN') {
