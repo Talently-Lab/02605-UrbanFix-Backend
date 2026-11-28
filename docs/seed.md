@@ -1,5 +1,7 @@
 # Catálogo oficial de barrios, Golden y Volumen — S4-05 CP2 a CP5
 
+**Actualización S4-07:** la preparación local incorpora teléfonos argentinos estructuralmente válidos y soporte de destinos Neon mediante autorización efímera explícita. Las bases locales conservadas no se modificaron y contienen la versión anterior de los teléfonos. No ejecutar los nuevos fixtures sobre ellas. Las evidencias CP2/CP2.1/CP5 siguientes son históricas; la preparación local no acredita cargas ni deployment en Neon/Render. Ver la sección S4-07 al final y [deployment y entrega](deployment.md).
+
 Estado vigente: CP5 completado, **LISTO PARA REVISIÓN**. Golden y Volumen están persistidos en el entorno local exclusivo de CP5. La infraestructura temporal de CP2/CP2.1 ya no está disponible; sus resultados se conservan como evidencias históricas. Ver el registro de CP5 al final de este documento antes de utilizar instrucciones de infraestructura.
 
 El modo `catalog` carga datos oficiales de referencia. Es independiente de los datasets ficticios golden y volumen. Ningún seed se ejecuta al importar sus módulos, iniciar la API o ejecutar migraciones.
@@ -30,7 +32,7 @@ La variable dedicada `URBANFIX_SEED_DATABASE_URL` debe identificar exactamente u
 | `127.0.0.1` | `55434` | `urbanfix_seed_cp3_golden_test`       | Golden persistido y verificado en CP5; conservar, no repetir integración sobre esta base poblada.     |
 | `127.0.0.1` | `55434` | `urbanfix_seed_cp4_volume_test`       | Volumen persistido y verificado en CP5; conservar, no repetir integración sobre esta base poblada.    |
 
-Se permiten los protocolos `postgresql` y `postgres` y credenciales locales de prueba. No se admiten otros hosts, puertos, bases, parámetros de conexión, fragmentos, rutas alternativas ni espacios. `NODE_ENV=production` también se rechaza, pero no es la única protección. Mantener un destino en esta lista no autoriza ejecutar comandos sobre él.
+Para los destinos locales se permiten los protocolos `postgresql` y `postgres` y credenciales locales de prueba. No se admiten otros hosts locales, puertos, bases, parámetros de conexión, fragmentos, rutas alternativas ni espacios. La excepción remota incorporada en S4-07 se limita al destino Neon expresamente autorizado, según la sección final. `NODE_ENV=production` también se rechaza, pero no es la única protección. Mantener un destino en esta lista no autoriza ejecutar comandos sobre él.
 
 La validación del modo, destino y CSV ocurre antes de cargar Prisma y construir el cliente. Dentro de la transacción, antes de consultar el catálogo, se verifican la pertenencia de `current_database()` a esa lista y `current_schema() = public`.
 
@@ -628,3 +630,38 @@ Los criterios de aceptación de CP5 se cumplen: el seed creó usuarios de cada r
 El coordinador terminó con cero conexiones abiertas y limpió las referencias temporales a credenciales mediante `finally`. Tiempo medido de la reanudación hasta esa limpieza: 27,3 minutos; sumado al primer coordinador de 16 minutos, 43,3 minutos instrumentados. Esta suma no incluye el TDD previo ni todos los intercambios de revisión, y no representa tiempo de CPU de PostgreSQL.
 
 Estado definitivo: **LISTO PARA REVISIÓN**. Quedan S4-06 y S4-07, sin iniciar. La evaluación y eventual eliminación de contenedor/volumen sigue pendiente del cierre de Sprint 4 y requiere autorización específica.
+
+## S4-07 — Preparación local posterior a las evidencias de CP5
+
+La frase anterior conserva el estado histórico del cierre de CP5. S4-06 fue completado posteriormente. S4-07 incorpora los cambios locales siguientes; las operaciones Neon y Render siguen pendientes de integración en `develop`, autorización específica y comprobación de destino.
+
+### Teléfonos y preservación determinista
+
+Golden cambia exclusivamente sus 16 teléfonos no nulos del prefijo sintético `+549110000` a `+549116400`; Volume cambia sus 60 teléfonos no nulos de `+549110001` a `+549116401`. Se conservan los sufijos deterministas y los tres ADMIN con null. No se modifica ningún otro campo, incluidos IDs, relaciones, hashes, cantidades, fechas, estados o referencias temporales. Los números tienen estructura válida, sin garantía de línea existente o rango reservado; no deben usarse para comunicaciones reales.
+
+`src/validators/phone.validator.js` centraliza la validación usada por registro, PATCH de perfil y ambos validadores de seed. `src/data/argentina-area-codes.json` contiene los 300 indicativos del archivo XLS oficial de ENACOM, la URL fuente y el SHA-256 de los bytes consultados. Se reconoce primero el indicativo coincidente más largo; el abonado comienza de 2 a 9. No se normalizan entradas ni se consultan servicios externos durante la validación.
+
+La comparación estática contra `ca4a883` comprobó exactamente 16 y 60 cambios de teléfono y equivalencia completa del resto. Una regresión conserva las huellas del dataset completo excluyendo únicamente `User.phone`:
+
+| Dataset | SHA-256 sin `User.phone` |
+| --- | --- |
+| Golden | `499e475baefc5259fd1ff227d5db35a5bdfb72282747adfb7782abbdd0c3b64a` |
+| Volume | `25c0ac412b8a3dd2fe355c0bb967c4c8de1cfb9529f0bb69af667ea8f8c4487d` |
+
+La huella del test histórico de calibración Volume pasa de `6635a2c81fe0508199b4e7b38886cb46a84eba7ff300c20ca8a9f64601447a75` a `471e3195f72169a348e8a1c25ae6a069260eb838563fa82c35280ff906f77a35` por esos teléfonos; las aserciones y métricas se mantienen.
+
+No se conectó a las bases locales conservadas ni se modificaron sus teléfonos. Los loaders rechazarían discrepancias con esa versión anterior: no reejecutarlos allí, ni actualizarlas, recrearlas o limpiarlas automáticamente. La pérdida histórica de las cinco bases temporales CP2/CP2.1 y la imposibilidad aceptada de comparar sus snapshots permanecen documentadas y no se reconstruyen.
+
+### Prisma 7 y destinos
+
+`package.json` declara `seed: node prisma/seed.js` y `prisma7.config.ts` declara `migrations.seed` con el mismo comando. El nuevo entrypoint delega al CLI existente de `prisma/seed/run.js`; conserva diagnósticos sanitizados, no duplica la lógica y no se ejecuta al importar. No se agregaron hooks de startup, instalación, migración o deployment para cargar datos.
+
+Las conexiones locales conservan la lista previa y sus puertos; las integraciones de catálogo, Golden y Volume siguen limitadas a sus destinos locales, aun cuando se proporcionen variables de autorización Neon. El runner normal admite Neon únicamente con `URBANFIX_SEED_ALLOW_NEON=1`, `URBANFIX_SEED_DATABASE_URL` dedicada y `URBANFIX_SEED_NEON_AUTHORIZATION` efímera. Esta última vincula proyecto `02605-urbanfix`, rama `golden` o `preproduction`, host exacto, base y usuario. Catálogo está permitido en ambas; Golden solo con autorización de `golden`, Volume solo con autorización de `preproduction`. `production`, combinaciones incorrectas y destinos desconocidos se rechazan.
+
+La conexión exige TLS `sslmode=verify-full`, puerto 5432 explícito o por defecto, sin fragmentos, espacios ni parámetros no enumerados. Opcionalmente admite `channel_binding=require`. No se versionan endpoints privados ni credenciales. Si se proporciona `DATABASE_URL`, debe coincidir exactamente con la conexión dedicada para Neon; no es un fallback. El runner no verifica por sí mismo la rama en el plano de control: esa correspondencia debe comprobarse antes de emitir la autorización efímera.
+
+Dentro de cada transacción se verifican base, esquema `public` y usuario efectivo contra el destino ya validado. No se añaden consultas por fila: se conserva la carga por lotes, sin N+1, sin actualizaciones, borrados ni reintentos. Los modos ficticios siguen exigiendo el catálogo oficial completo y rechazan contenido existente divergente.
+
+Para comandos futuros, entorno mínimo, migraciones, credenciales en memoria, accesos SQL individuales y verificación remota, seguir [deployment y entrega](deployment.md). Este soporte local no constituye autorización para ejecutar ninguna operación persistente.
+
+Verificación local S4-07: suite segura única de 309 tests, con 302 aprobados, 0 fallidos y 7 integraciones omitidas; revisión posterior de las guardas con TDD y 63 tests específicos de seed aprobados. No se repitieron las integraciones reales de S4-05/S4-06. Los cambios de guardas remotas se verificaron exclusivamente con mocks. Ver el alcance y las limitaciones en [deployment](deployment.md#verificación-local-de-esta-entrega).

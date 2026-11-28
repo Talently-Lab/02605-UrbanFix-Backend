@@ -1,0 +1,534 @@
+{
+  "info": {
+    "name": "UrbanFix Sprint 4",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Solo preproduction verificada. No ejecutada remotamente. Login, registro y PATCH escriben datos. Escrituras deshabilitadas por defecto. Login antes de Perfil; seleccionar requests y rol conscientemente, no ejecutar toda la coleccion como flujo de alta."
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const base = pm.environment.get('baseUrl');",
+          "const approved = pm.environment.get('approvedBaseUrl');",
+          "const target = pm.environment.get('target');",
+          "const url = pm.variables.replaceIn(pm.request.url.toString());",
+          "if (!base || !/^https:\\/\\/[^/?#@\\\\\\s]+$/.test(base) || base !== approved || target !== 'preproduction' || !url.startsWith(base + '/')) pm.execution.skipRequest();",
+          "if (!['GET', 'HEAD', 'OPTIONS'].includes(pm.request.method) && pm.environment.get('allowWrites') !== 'true') pm.execution.skipRequest();"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Consultas",
+      "item": [
+        {
+          "name": "Health basico",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [],
+            "url": "{{baseUrl}}/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Sin campos sensibles', () => {",
+                  "  const visit = value => { if (value && typeof value === 'object') for (const [key, item] of Object.entries(value)) { pm.expect(['passwordHash', 'password', 'licenseNumber']).not.to.include(key); visit(item); } };",
+                  "  visit(pm.response.json());",
+                  "});",
+                  "pm.test('Health', () => pm.expect(pm.response.json().message).to.eql('UrbanFix API funcionando'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Especialidades",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [],
+            "url": "{{baseUrl}}/api/especialidades"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Sin campos sensibles', () => {",
+                  "  const visit = value => { if (value && typeof value === 'object') for (const [key, item] of Object.entries(value)) { pm.expect(['passwordHash', 'password', 'licenseNumber']).not.to.include(key); visit(item); } };",
+                  "  visit(pm.response.json());",
+                  "});",
+                  "pm.test('Cinco especialidades', () => pm.expect(pm.response.json()).to.have.lengthOf(5));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Barrios",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [],
+            "url": "{{baseUrl}}/api/barrios"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Sin campos sensibles', () => {",
+                  "  const visit = value => { if (value && typeof value === 'object') for (const [key, item] of Object.entries(value)) { pm.expect(['passwordHash', 'password', 'licenseNumber']).not.to.include(key); visit(item); } };",
+                  "  visit(pm.response.json());",
+                  "});",
+                  "pm.test('48 barrios oficiales', () => { const rows=pm.response.json(); pm.expect(rows).to.have.lengthOf(48); rows.forEach(row=>pm.expect(row).to.have.all.keys('id','name')); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Perfil propio",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [],
+            "url": "{{baseUrl}}/api/usuarios/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Sin campos sensibles', () => {",
+                  "  const visit = value => { if (value && typeof value === 'object') for (const [key, item] of Object.entries(value)) { pm.expect(['passwordHash', 'password', 'licenseNumber']).not.to.include(key); visit(item); } };",
+                  "  visit(pm.response.json());",
+                  "});",
+                  "pm.test('Perfil propio y rol esperado', () => { const data=pm.response.json(); pm.expect(data.role).to.eql(pm.environment.get('expectedRole')); pm.expect(data).to.have.all.keys('id','name','email','phone','role','accountStatus','technician','lastLoginAt','isTestUser'); if (data.role==='ADMIN') pm.expect(data.phone).to.eql(null); if (data.role==='TECHNICIAN') pm.expect(data.technician).to.have.all.keys('id','approvalStatus'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Perfil sin token",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [],
+            "url": "{{baseUrl}}/api/usuarios/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Sin campos sensibles', () => {",
+                  "  const visit = value => { if (value && typeof value === 'object') for (const [key, item] of Object.entries(value)) { pm.expect(['passwordHash', 'password', 'licenseNumber']).not.to.include(key); visit(item); } };",
+                  "  visit(pm.response.json());",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Escrituras explicitas en preproduction",
+      "item": [
+        {
+          "name": "Registro CLIENT",
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/auth/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"QA Cliente\",\n  \"email\": \"{{registrationEmail}}\",\n  \"password\": \"{{registrationPassword}}\",\n  \"role\": \"CLIENT\",\n  \"phone\": \"+541143216543\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.environment.get('allowRegistration') !== 'true' || !pm.environment.get('registrationEmail') || !pm.environment.get('registrationPassword')) pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Sin campos sensibles', () => {",
+                  "  const visit = value => { if (value && typeof value === 'object') for (const [key, item] of Object.entries(value)) { pm.expect(['passwordHash', 'password', 'licenseNumber']).not.to.include(key); visit(item); } };",
+                  "  visit(pm.response.json());",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registro TECHNICIAN",
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/auth/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"QA Tecnico\",\n  \"email\": \"{{registrationTechnicianEmail}}\",\n  \"password\": \"{{registrationPassword}}\",\n  \"role\": \"TECHNICIAN\",\n  \"phone\": \"+5491164004700\",\n  \"specialties\": [\n    {\n      \"category\": \"PLUMBING\"\n    }\n  ],\n  \"neighborhoodIds\": [\n    \"{{neighborhoodId}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.environment.get('allowRegistration') !== 'true' || !pm.environment.get('registrationPassword') || !pm.environment.get('registrationTechnicianEmail') || !pm.environment.get('neighborhoodId')) pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Sin campos sensibles', () => {",
+                  "  const visit = value => { if (value && typeof value === 'object') for (const [key, item] of Object.entries(value)) { pm.expect(['passwordHash', 'password', 'licenseNumber']).not.to.include(key); visit(item); } };",
+                  "  visit(pm.response.json());",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.unset('accessToken');",
+                  "if (!pm.environment.get('email') || !pm.environment.get('password')) pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Sin campos sensibles', () => {",
+                  "  const visit = value => { if (value && typeof value === 'object') for (const [key, item] of Object.entries(value)) { pm.expect(['passwordHash', 'password', 'licenseNumber']).not.to.include(key); visit(item); } };",
+                  "  visit(pm.response.json());",
+                  "});",
+                  "if (pm.response.code===200) { const data=pm.response.json(); pm.test('Bearer y expiracion', () => { pm.expect(data.tokenType).to.eql('Bearer'); pm.expect(data.expiresIn).to.eql(3600); pm.expect(data.accessToken).to.be.a('string').and.not.empty; }); pm.environment.set('accessToken',data.accessToken); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Editar nombre - todos los roles",
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/usuarios/me",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"QA Perfil\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Sin campos sensibles', () => {",
+                  "  const visit = value => { if (value && typeof value === 'object') for (const [key, item] of Object.entries(value)) { pm.expect(['passwordHash', 'password', 'licenseNumber']).not.to.include(key); visit(item); } };",
+                  "  visit(pm.response.json());",
+                  "});",
+                  "pm.test('Perfil propio y rol esperado', () => { const data=pm.response.json(); pm.expect(data.role).to.eql(pm.environment.get('expectedRole')); pm.expect(data).to.have.all.keys('id','name','email','phone','role','accountStatus','technician','lastLoginAt','isTestUser'); if (data.role==='ADMIN') pm.expect(data.phone).to.eql(null); if (data.role==='TECHNICIAN') pm.expect(data.technician).to.have.all.keys('id','approvalStatus'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Editar telefono CLIENT",
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/usuarios/me",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"+541143216543\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.environment.get('expectedRole') !== 'CLIENT') pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Sin campos sensibles', () => {",
+                  "  const visit = value => { if (value && typeof value === 'object') for (const [key, item] of Object.entries(value)) { pm.expect(['passwordHash', 'password', 'licenseNumber']).not.to.include(key); visit(item); } };",
+                  "  visit(pm.response.json());",
+                  "});",
+                  "pm.test('Perfil propio y rol esperado', () => { const data=pm.response.json(); pm.expect(data.role).to.eql(pm.environment.get('expectedRole')); pm.expect(data).to.have.all.keys('id','name','email','phone','role','accountStatus','technician','lastLoginAt','isTestUser'); if (data.role==='ADMIN') pm.expect(data.phone).to.eql(null); if (data.role==='TECHNICIAN') pm.expect(data.technician).to.have.all.keys('id','approvalStatus'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Telefono prohibido TECHNICIAN o ADMIN",
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/usuarios/me",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"No debe persistir\",\n  \"phone\": \"+541143216543\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!['TECHNICIAN','ADMIN'].includes(pm.environment.get('expectedRole'))) pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Sin campos sensibles', () => {",
+                  "  const visit = value => { if (value && typeof value === 'object') for (const [key, item] of Object.entries(value)) { pm.expect(['passwordHash', 'password', 'licenseNumber']).not.to.include(key); visit(item); } };",
+                  "  visit(pm.response.json());",
+                  "});",
+                  "pm.test('Campo phone rechazado', () => pm.expect(pm.response.json().errors.some(error=>error.field==='phone')).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Payload mixto invalido",
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/usuarios/me",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"No debe persistir\",\n  \"phone\": \"+12\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Sin campos sensibles', () => {",
+                  "  const visit = value => { if (value && typeof value === 'object') for (const [key, item] of Object.entries(value)) { pm.expect(['passwordHash', 'password', 'licenseNumber']).not.to.include(key); visit(item); } };",
+                  "  visit(pm.response.json());",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -4,6 +4,8 @@ Este contrato utiliza la estructura de operaciones, parámetros, cuerpos y respu
 
 ## 1. Inventario de endpoints
 
+**Disponibilidad en Sprint 4:** están implementados POST `/api/auth/register`, POST `/api/auth/login`, GET/PATCH `/api/usuarios/me`, GET `/api/especialidades` y GET `/api/barrios`, además del Health Check HTTP GET `/`. Las demás operaciones de este contrato son planificadas para sprints posteriores; los routers protegidos vacíos no representan endpoints funcionales. La especificación ejecutable de las operaciones disponibles está en [OpenAPI](openapi.json), accesible en `/openapi.json` y Swagger `/docs/`. Ver [deployment y entrega](deployment.md) para los destinos y comprobaciones pendientes.
+
 Auth indica quién puede acceder. «No» significa acceso público. Las condiciones específicas de cada rol se detallan en los contratos individuales.
 
 | Método | Ruta                               | Descripción                                                                    | Auth               |
@@ -169,7 +171,7 @@ Público. Registra una cuenta CLIENT y devuelve HTTP 201.
   "name": "Ana Pérez",
   "email": "ana@example.com",
   "password": "EjemploSeguro123!",
-  "phone": "+5491100000000",
+  "phone": "+5491164004700",
   "role": "CLIENT"
 }
 ```
@@ -182,7 +184,7 @@ email es un string con formato email, debe enviarse íntegramente en minúsculas
 
 password es un string de al menos 8 caracteres.
 
-phone es un string obligatorio que contiene el teléfono del cliente en formato internacional, con el signo + seguido del prefijo de país y el número. Admite entre 2 y 15 dígitos en total, con el primer dígito distinto de cero. Se envía sin espacios, guiones ni paréntesis. Backend valida el formato antes de guardarlo.
+phone es un string obligatorio con el número argentino internacional completo: fijo `+54` seguido de 10 dígitos nacionales (12 dígitos en total) o móvil `+549` seguido de 10 dígitos nacionales (13 en total), sin contar el signo `+`. El número nacional se divide en un indicativo oficial ENACOM de 2 a 4 dígitos y un abonado de 6 a 8 dígitos que comienza de 2 a 9. Ejemplos: `+541143216543` y `+5491164004700`. Se rechazan otros países, códigos de área desconocidos, espacios, guiones, paréntesis y prefijos nacionales `0`/`15`. No hay normalización implícita: Backend guarda y responde el string completo recibido. Frontend es responsable de presentar e incorporar el prefijo correspondiente. La validación compartida comprueba estructura, no existencia ni titularidad de la línea. Fuente del catálogo: [ENACOM](https://www.enacom.gob.ar/indicativos-interurbanos_p143).
 
 role debe contener CLIENT para esta variante de registro.
 
@@ -397,7 +399,7 @@ Ejemplo para CLIENT:
 ```json
 {
   "name": "Ana Pérez",
-  "phone": "+5491100000000"
+  "phone": "+5491164004700"
 }
 ```
 
@@ -416,7 +418,7 @@ Ejemplo para CLIENT después de actualizar el nombre y el teléfono:
   "id": "00000000-0000-4000-8000-000000000001",
   "name": "Ana Pérez",
   "email": "ana@example.com",
-  "phone": "+5491100000000",
+  "phone": "+5491164004700",
   "role": "CLIENT",
   "accountStatus": "ACTIVE",
   "technician": null,
@@ -813,7 +815,7 @@ Para el CLIENT titular, el detalle incorpora technicianPhone, un string obtenido
     "apartment": "B",
     "directions": "Tocar el timbre del departamento."
   },
-  "clientPhone": "+5491100000000"
+  "clientPhone": "+5491164004700"
 }
 ```
 

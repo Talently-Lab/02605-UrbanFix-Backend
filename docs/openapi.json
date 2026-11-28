@@ -1,0 +1,980 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "UrbanFix Backend API",
+    "version": "1.0.0",
+    "description": "Operaciones implementadas en Sprint 4. Solicitudes, ofertas, moderacion y metricas no estan disponibles todavia. Numeros y ejemplos son ficticios."
+  },
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Health"
+    },
+    {
+      "name": "Auth"
+    },
+    {
+      "name": "Profile"
+    },
+    {
+      "name": "Catalogs"
+    }
+  ],
+  "paths": {
+    "/": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "operationId": "health",
+        "summary": "Disponibilidad HTTP basica",
+        "description": "No consulta PostgreSQL. No acredita disponibilidad de la base.",
+        "responses": {
+          "200": {
+            "description": "Servidor disponible.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "message"
+                  ],
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "enum": [
+                        "UrbanFix API funcionando"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/register": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "register",
+        "summary": "Registrar CLIENT o TECHNICIAN",
+        "description": "Publico. No emite token. ADMIN no admite registro publico. Alta tecnica atomica con aprobacion PENDING. Campos desconocidos rechazados.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/ClientRegistration"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TechnicianRegistration"
+                  }
+                ],
+                "discriminator": {
+                  "propertyName": "role",
+                  "mapping": {
+                    "CLIENT": "#/components/schemas/ClientRegistration",
+                    "TECHNICIAN": "#/components/schemas/TechnicianRegistration"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Cuenta creada; sin phone en esta respuesta.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Identity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validacion o JSON invalido.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Recurso no disponible.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Email ya registrado en cualquier rol.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload demasiado grande.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Codificacion o charset no admitido.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error interno sanitizado.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "login",
+        "summary": "Iniciar sesion",
+        "description": "Actualiza lastLoginAt tras autenticar. El valor incluido en user es el anterior. No usa cookies.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Login"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "JWT HS256 valido durante 3600 segundos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validacion o JSON invalido.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Autenticacion ausente, token invalido/vencido o credenciales incorrectas.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Desafio Bearer."
+              }
+            }
+          },
+          "403": {
+            "description": "Cuenta suspendida o rol no autorizado.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload demasiado grande.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Codificacion o charset no admitido.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error interno sanitizado.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/usuarios/me": {
+      "get": {
+        "tags": [
+          "Profile"
+        ],
+        "operationId": "getOwnProfile",
+        "summary": "Consultar perfil propio",
+        "description": "CLIENT, TECHNICIAN y ADMIN activos. Rol y estado se comprueban en la base. No expone campos sensibles ni datos de terceros.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Perfil propio.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Autenticacion ausente, token invalido/vencido o credenciales incorrectas.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Desafio Bearer."
+              }
+            }
+          },
+          "403": {
+            "description": "Cuenta suspendida o rol no autorizado.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error interno sanitizado.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Profile"
+        ],
+        "operationId": "updateOwnProfile",
+        "summary": "Actualizar perfil propio",
+        "description": "name editable por todos los roles activos; phone exclusivo de CLIENT. TECHNICIAN y ADMIN rechazan phone incluso combinado con name. Campos omitidos conservados; peticiones invalidas no actualizan parcialmente. Sin normalizacion implicita.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfilePatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Perfil actualizado.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validacion o JSON invalido.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Autenticacion ausente, token invalido/vencido o credenciales incorrectas.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Desafio Bearer."
+              }
+            }
+          },
+          "403": {
+            "description": "Cuenta suspendida o rol no autorizado.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload demasiado grande.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Codificacion o charset no admitido.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error interno sanitizado.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/especialidades": {
+      "get": {
+        "tags": [
+          "Catalogs"
+        ],
+        "operationId": "listSpecialties",
+        "summary": "Catalogo publico de especialidades",
+        "responses": {
+          "200": {
+            "description": "Cinco especialidades.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Specialty"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error interno sanitizado.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/barrios": {
+      "get": {
+        "tags": [
+          "Catalogs"
+        ],
+        "operationId": "listNeighborhoods",
+        "summary": "Catalogo publico de barrios",
+        "description": "Ordenado por name ascendente. Responde id y name; comuna no se expone en este endpoint. Requiere catalogo cargado para entregar los 48 barrios.",
+        "responses": {
+          "200": {
+            "description": "Barrios disponibles.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Neighborhood"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error interno sanitizado.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "Phone": {
+        "type": "string",
+        "pattern": "^\\+54(?:[0-9]{10}|9[0-9]{10})$",
+        "minLength": 13,
+        "maxLength": 14,
+        "example": "+5491164004700",
+        "description": "Telefono argentino internacional estricto: +54 fijo o +549 movil; 10 digitos nacionales, indicativo ENACOM de 2 a 4 digitos y abonado que comienza de 2 a 9. Sin espacios, separadores, 0 interurbano ni 15 nacional. No se normaliza ni se comprueba existencia o titularidad."
+      },
+      "Identity": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "email",
+          "role",
+          "accountStatus",
+          "technician",
+          "lastLoginAt",
+          "isTestUser"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+            "description": "Obligatorio en minusculas; unico entre todos los roles."
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "CLIENT",
+              "TECHNICIAN",
+              "ADMIN"
+            ]
+          },
+          "accountStatus": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "SUSPENDED"
+            ]
+          },
+          "technician": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "approvalStatus"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "approvalStatus": {
+                "type": "string",
+                "enum": [
+                  "PENDING",
+                  "APPROVED",
+                  "REJECTED"
+                ]
+              }
+            }
+          },
+          "lastLoginAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "En login representa el acceso exitoso anterior; en perfil, el valor persistido actual."
+          },
+          "isTestUser": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Profile": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "email",
+          "role",
+          "accountStatus",
+          "technician",
+          "lastLoginAt",
+          "isTestUser",
+          "phone"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+            "description": "Obligatorio en minusculas; unico entre todos los roles."
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "CLIENT",
+              "TECHNICIAN",
+              "ADMIN"
+            ]
+          },
+          "accountStatus": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "SUSPENDED"
+            ]
+          },
+          "technician": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "approvalStatus"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "approvalStatus": {
+                "type": "string",
+                "enum": [
+                  "PENDING",
+                  "APPROVED",
+                  "REJECTED"
+                ]
+              }
+            }
+          },
+          "lastLoginAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "En login representa el acceso exitoso anterior; en perfil, el valor persistido actual."
+          },
+          "isTestUser": {
+            "type": "boolean"
+          },
+          "phone": {
+            "type": "string",
+            "pattern": "^\\+54(?:[0-9]{10}|9[0-9]{10})$",
+            "minLength": 13,
+            "maxLength": 14,
+            "example": "+5491164004700",
+            "description": "Telefono argentino internacional estricto: +54 fijo o +549 movil; 10 digitos nacionales, indicativo ENACOM de 2 a 4 digitos y abonado que comienza de 2 a 9. Sin espacios, separadores, 0 interurbano ni 15 nacional. No se normaliza ni se comprueba existencia o titularidad. Null para ADMIN.",
+            "nullable": true
+          }
+        }
+      },
+      "ClientRegistration": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "email",
+          "password",
+          "phone",
+          "role"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "\\S"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+            "description": "Obligatorio en minusculas; unico entre todos los roles."
+          },
+          "password": {
+            "type": "string",
+            "minLength": 8,
+            "pattern": "\\S",
+            "writeOnly": true
+          },
+          "phone": {
+            "$ref": "#/components/schemas/Phone"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "CLIENT"
+            ]
+          }
+        }
+      },
+      "TechnicianRegistration": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "email",
+          "password",
+          "phone",
+          "role",
+          "specialties",
+          "neighborhoodIds"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "\\S"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+            "description": "Obligatorio en minusculas; unico entre todos los roles."
+          },
+          "password": {
+            "type": "string",
+            "minLength": 8,
+            "pattern": "\\S",
+            "writeOnly": true
+          },
+          "phone": {
+            "$ref": "#/components/schemas/Phone"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "TECHNICIAN"
+            ]
+          },
+          "specialties": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "description": "Una entrada por categoria, sin duplicados. GAS y ELECTRICITY requieren licenseNumber no vacio.",
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "category",
+                    "licenseNumber"
+                  ],
+                  "properties": {
+                    "category": {
+                      "type": "string",
+                      "enum": [
+                        "ELECTRICITY",
+                        "GAS"
+                      ]
+                    },
+                    "licenseNumber": {
+                      "type": "string",
+                      "pattern": "\\S"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "category"
+                  ],
+                  "properties": {
+                    "category": {
+                      "type": "string",
+                      "enum": [
+                        "PLUMBING",
+                        "LOCKSMITH",
+                        "MASONRY"
+                      ]
+                    },
+                    "licenseNumber": {
+                      "type": "string",
+                      "pattern": "\\S"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "neighborhoodIds": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        }
+      },
+      "Login": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "email",
+          "password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+            "description": "Obligatorio en minusculas; unico entre todos los roles."
+          },
+          "password": {
+            "type": "string",
+            "pattern": "\\S",
+            "writeOnly": true
+          }
+        }
+      },
+      "LoginResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "accessToken",
+          "tokenType",
+          "expiresIn",
+          "user"
+        ],
+        "properties": {
+          "accessToken": {
+            "type": "string"
+          },
+          "tokenType": {
+            "type": "string",
+            "enum": [
+              "Bearer"
+            ]
+          },
+          "expiresIn": {
+            "type": "integer",
+            "enum": [
+              3600
+            ]
+          },
+          "user": {
+            "$ref": "#/components/schemas/Identity"
+          }
+        }
+      },
+      "ProfilePatch": {
+        "type": "object",
+        "minProperties": 1,
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "\\S"
+          },
+          "phone": {
+            "$ref": "#/components/schemas/Phone"
+          }
+        },
+        "description": "phone permitido solo para CLIENT; para TECHNICIAN y ADMIN solo name."
+      },
+      "Specialty": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "category",
+          "name",
+          "licenseRequired"
+        ],
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": [
+              "ELECTRICITY",
+              "PLUMBING",
+              "GAS",
+              "LOCKSMITH",
+              "MASONRY"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "licenseRequired": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Neighborhood": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "Problem": {
+        "type": "object",
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail"
+        ],
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "field",
+                "detail"
+              ],
+              "properties": {
+                "field": {
+                  "type": "string"
+                },
+                "detail": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

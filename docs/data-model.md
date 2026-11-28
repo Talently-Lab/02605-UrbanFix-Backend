@@ -174,7 +174,7 @@ El diagnóstico interno solo conserva datos sanitizados.
 
 Descripción obligatoria de 20 a 500 caracteres. Calle y número obligatorios; el número admite S/N. Piso, departamento e indicaciones son opcionales. Las entradas opcionales omitidas se guardan como null; enviar null, texto vacío o espacios produce HTTP 400.
 
-El teléfono utiliza formato internacional con + y entre 2 y 15 dígitos, sin separadores y con el primer dígito distinto de cero. CLIENT y TECHNICIAN deben informar phone al registrarse; solo CLIENT puede editarlo posteriormente (D-040).
+El teléfono utiliza el número argentino internacional completo, sin separadores ni normalización: fijo `+54` más 10 dígitos nacionales o móvil `+549` más 10 dígitos nacionales. Se comprueba el indicativo oficial ENACOM de 2 a 4 dígitos y el abonado de 6 a 8 dígitos con inicio entre 2 y 9. No se admiten prefijos nacionales `0`/`15`. CLIENT y TECHNICIAN deben informar phone al registrarse; solo CLIENT puede editarlo posteriormente (D-040); ADMIN permanece en null. El formato se valida en Backend mediante el mismo validador que utilizan Golden y Volume. No se comprueba existencia de línea, unicidad ni titularidad. La columna String? y la restricción por rol se conservan: este ajuste no requiere cambios del schema ni migraciones. Ver [contrato API](api-contract.md) y [catálogo ENACOM](https://www.enacom.gob.ar/indicativos-interurbanos_p143).
 
 El JWT dura 1 hora desde el login y devuelve expiresIn 3600.
 

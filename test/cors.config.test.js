@@ -30,10 +30,11 @@ test('FRONTEND_URL rechaza comodines, credenciales y componentes ajenos al orige
   }
 });
 
-function runStartup(frontendUrl) {
+function runStartup(frontendUrl, port) {
   const events = [];
   const logs = [];
-  const app = { use() {}, get() {}, listen() { events.push('listen'); } };
+  const bindings = [];
+  const app = { use() {}, get() {}, listen(...args) { events.push('listen'); bindings.push(args.slice(0, 2)); } };
   const express = Object.assign(() => app, { json: () => () => {} });
   const entry = require.resolve('../src/index');
   const localRequire = createRequire(entry);
@@ -46,12 +47,12 @@ function runStartup(frontendUrl) {
     return localRequire(name);
   };
   fakeRequire.main = module;
-  const process = { env: { FRONTEND_URL: frontendUrl } };
+  const process = { env: { FRONTEND_URL: frontendUrl, PORT: port } };
   vm.runInNewContext(fs.readFileSync(entry, 'utf8'), {
     require: fakeRequire, module, process,
     console: { error: message => logs.push(message), log() {} },
   });
-  return { events, logs, process };
+  return { events, logs, process, bindings };
 }
 
 test('arranque inválido se detiene antes de cargar Prisma o escuchar, sin leer .env real', () => {
@@ -70,4 +71,16 @@ test('arranque válido carga la configuración antes de Prisma y del servidor', 
   assert.deepEqual(events, ['dotenv', 'prisma', 'listen']);
   assert.deepEqual(logs, []);
   assert.equal(process.exitCode, undefined);
+});
+
+test('arranque usa PORT de Render o 3000 local, escuchando en 0.0.0.0', () => {
+  for (const [value, expected] of [[undefined, 3000], ['10000', 10000], ['65535', 65535]]) {
+    assert.deepEqual(runStartup('https://frontend.example.test', value).bindings, [[expected, '0.0.0.0']]);
+  }
+  for (const port of ['', '0', '-1', '65536', '3.5', ' 3000', 'pipe', '3e3']) {
+    const result = runStartup('https://frontend.example.test', port);
+    assert.equal(result.process.exitCode, 1);
+    assert.deepEqual(result.events, ['dotenv']);
+    assert.match(result.logs[0], /PORT/);
+  }
 });

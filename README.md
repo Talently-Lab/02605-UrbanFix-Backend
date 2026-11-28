@@ -1,140 +1,53 @@
 # UrbanFix Solutions — Backend
 
-Backend de UrbanFix Solutions, una plataforma web que busca conectar clientes con técnicos de servicios de forma organizada y transparente.
+API de UrbanFix para conectar clientes y técnicos. Backend en Node.js, Express (CommonJS), Prisma 7 y PostgreSQL.
 
-## 1. Descripción del proyecto
+## Operaciones disponibles en Sprint 4
 
-Este repositorio contiene el Backend de UrbanFix Solutions, responsable de proporcionar la API y, progresivamente, implementar la lógica de negocio y el acceso a los datos de la plataforma.
+| Método | Ruta | Acceso |
+| --- | --- | --- |
+| GET | `/` | Público; Health Check HTTP básico, sin consulta a PostgreSQL |
+| POST | `/api/auth/register` | Público; CLIENT y TECHNICIAN |
+| POST | `/api/auth/login` | Público; cuenta activa |
+| GET | `/api/usuarios/me` | Cuenta activa de cualquier rol |
+| PATCH | `/api/usuarios/me` | Nombre: todos los roles; teléfono: solo CLIENT |
+| GET | `/api/especialidades` | Público |
+| GET | `/api/barrios` | Público |
 
-## 2. Tecnologías
+Swagger: `/docs/`. Especificación: `/openapi.json`. Solicitudes, ofertas, búsqueda de técnicos, moderación y métricas figuran en el contrato funcional para sprints posteriores; todavía no están implementadas.
 
-- **Node.js:** entorno de ejecución de JavaScript.
-- **Express:** framework para desarrollar la API.
-- **Prisma ORM:** herramienta para modelar y acceder a los datos.
-- **PostgreSQL:** base de datos relacional, con Neon como proveedor previsto.
+## Desarrollo local
 
-## 3. Estructura del proyecto
+Usar Node.js compatible con las versiones fijadas en `pnpm-lock.yaml` y pnpm (entorno verificado: Node 24 y pnpm 11). Instalar con `pnpm install --frozen-lockfile --ignore-scripts`; no se ejecutan scripts de instalación. Generar Prisma Client explícitamente con `pnpm exec prisma generate --config=prisma7.config.ts` sobre la configuración autorizada. Este comando genera código local, no aplica migraciones ni carga datos.
 
-```text
-├── src/
-│   └── index.js           # Servidor Express
-├── prisma/
-│   └── schema.prisma      # Boceto inicial del modelo de datos
-├── prisma7.config.ts      # Configuración de Prisma
-├── package.json           # Dependencias y scripts
-├── pnpm-lock.yaml         # Versiones de dependencias
-├── .gitignore             # Archivos excluidos de Git
-└── README.md              # Documentación del proyecto
-```
+Configurar `DATABASE_URL`, `JWT_SECRET` y `FRONTEND_URL` mediante el entorno local protegido. No versionar secretos. `FRONTEND_URL` acepta orígenes HTTP/HTTPS exactos separados por comas, sin rutas ni comodines. `PORT` es opcional en local (3000); en Render se utiliza el valor suministrado por la plataforma. Ejecutar `pnpm start` solo después de confirmar el destino de la conexión.
 
-## 4. Requisitos previos
+La API utiliza JWT Bearer HS256 con expiración de una hora y no utiliza cookies de autenticación. El registro no devuelve token. Los errores usan `application/problem+json`; los detalles internos se sanitizan.
 
-Entorno utilizado para la configuración inicial:
+CLIENT y TECHNICIAN registran teléfono argentino internacional completo, sin normalización: fijo `+541143216543` o móvil `+5491164004700`. Se validan los códigos de área de ENACOM; Frontend incorpora el prefijo correspondiente en su presentación. ADMIN mantiene teléfono nulo. El nombre propio es editable por todos los roles; solo CLIENT edita su teléfono.
 
-- Node.js `v24.16.0`
-- pnpm `11.5.1`
-- Git, para clonar el repositorio.
+## Pruebas
 
-## 5. Configuración
+`pnpm test` ejecuta `node --test`. Las integraciones PostgreSQL están deshabilitadas por defecto, pero variables heredadas pueden habilitarlas. Para una suite segura, ejecutar un proceso hijo con entorno mínimo, `URBANFIX_RUN_DB_TESTS=0`, `URBANFIX_RUN_SEED_DB_TESTS=0`, sin URLs de conexión ni variables de autorización Neon. No reutilizar una terminal preparada para migraciones o seeds. Ver [deployment y entrega](docs/deployment.md).
 
-El servidor Express utiliza actualmente el puerto `3000`, definido en `src/index.js`.
+No hay scripts de lint, type checking o build configurados. No ejecutar integraciones sobre bases pobladas sin revisar sus efectos y obtener autorización.
 
-La configuración de Prisma se encuentra en `prisma7.config.ts` y utiliza la variable de entorno `DATABASE_URL` para la conexión a PostgreSQL.
+## Datos y entornos
 
-El archivo `.env` está excluido del control de versiones para evitar publicar credenciales.
+El seed siempre requiere modo y destino explícitos; nunca se ejecuta en startup, build o migraciones. `pnpm run seed --mode=catalog` y `pnpm exec prisma db seed --config=prisma7.config.ts -- --mode=catalog` utilizan el mismo runner. Estos comandos escriben datos y requieren autorización y destino verificado; no son parte del arranque normal.
 
-`FRONTEND_URL` es obligatoria durante el arranque real del servidor. Se carga mediante `dotenv` y se valida antes de cargar Prisma o escuchar conexiones. Si falta o es inválida, el proceso termina con código 1 y un mensaje descriptivo que no muestra su contenido. `.env.example` contiene únicamente ejemplos sin credenciales.
+La arquitectura prevista es Neon `golden` para catálogos + Golden y `preproduction` para catálogos + Volume. Render utilizará `develop` y únicamente `preproduction`. `production` queda excluida. La implementación local no acredita que esos entornos ya estén preparados o desplegados.
 
-Ejemplo de un origen para desarrollo local:
-
-```dotenv
-FRONTEND_URL=http://localhost:5173
-```
-
-Ejemplo con varios orígenes separados por comas:
-
-```dotenv
-FRONTEND_URL=http://localhost:5173,https://frontend.example.test
-```
-
-Los dominios y puertos son ejemplos: deben reemplazarse por los orígenes autorizados del Frontend de cada entorno. En despliegue, configurar la variable con los dominios HTTPS correspondientes. Solo se admiten URLs HTTP/HTTPS de origen, con barra final `/` opcional, sin credenciales, paths de aplicación, query strings, fragmentos ni comodines.
-
-CORS compara exactamente los orígenes configurados, admite GET, HEAD, POST, PATCH y OPTIONS, permite `Authorization` y `Content-Type` y expone `WWW-Authenticate`. El preflight autorizado devuelve 204 antes de autenticación. No se habilitan credenciales de navegador. Un origen no autorizado no recibe autorización CORS ni un rechazo HTTP 403 adicional; las peticiones sin `Origin` siguen su procesamiento normal.
-
-Los tests inyectan los orígenes en `createApp` y no necesitan leer `.env`. Sin orígenes inyectados, la aplicación de prueba no autoriza ningún origen CORS.
-
-La conexión con Neon todavía no ha sido verificada y no es necesaria para ejecutar el endpoint inicial de Express.
-
-## 6. Instalación y ejecución
-
-Clonar el repositorio:
-
-```bash
-git clone https://github.com/Talently-Lab/02605-UrbanFix-Backend.git
-```
-
-Ingresar al directorio del proyecto:
-
-```bash
-cd 02605-UrbanFix-Backend
-```
-
-Instalar las dependencias:
-
-```bash
-pnpm install
-```
-
-Iniciar el servidor:
-
-```bash
-pnpm start
-```
-
-El servidor estará disponible en:
-
-`http://localhost:3000`
-
-## 7. API disponible
-
-### GET /
-
-Endpoint inicial para comprobar que el servidor responde.
-
-**URL:** `http://localhost:3000/`
-
-**Método:** `GET`
-
-**Respuesta esperada (200 OK):**
-
-```json
-{
-  "message": "UrbanFix API funcionando"
-}
-```
-
-Este endpoint no requiere autenticación.
-
-## 8. Verificación
-
-Con el servidor iniciado, abrir en el navegador:
-
-`http://localhost:3000/`
-
-También se puede verificar desde PowerShell:
-
-```powershell
-Invoke-RestMethod -Uri http://localhost:3000/ -Method Get
-```
-
-El comando realiza una petición GET y muestra la respuesta del servidor.
-
-Si devuelve el mensaje `UrbanFix API funcionando`, el servidor inicial responde correctamente.
+Los teléfonos sintéticos fueron adecuados en S4-07. Las bases locales conservadas de S4-05 contienen la versión anterior: no ejecutar los nuevos seeds sobre ellas ni corregirlas automáticamente. Los resultados históricos siguen documentados.
 
 ## Documentación
 
-- [Contrato de API](docs/api-contract.md)
-- [Guía de contribución](docs/CONTRIBUTING.md)
-- [Modelo de Datos](docs/data-model.md)
+- [Contrato de API y operaciones planificadas](docs/api-contract.md)
+- [OpenAPI de operaciones implementadas](docs/openapi.json)
+- [Modelo de datos](docs/data-model.md)
 - [Matriz RBAC](docs/rbac-matrix.md)
-- [Catálogo de reglas de negocio](https://app.notion.com/p/UrbanFix-Cat-logo-de-Reglas-de-Negocio-40d21cf73aff80e1ad8fd06ce3c71d9e)
+- [Seed y evidencias históricas](docs/seed.md)
+- [Deployment, Postman y entrega](docs/deployment.md)
+- [Guía de contribución](docs/CONTRIBUTING.md)
+
+La Matriz de Reglas de Negocio vigente del equipo prevalece sobre el antiguo catálogo y sobre casos QA contradictorios. Su publicación o enlace compartido actualizado queda pendiente de coordinación; no se sustituye por un enlace obsoleto.
