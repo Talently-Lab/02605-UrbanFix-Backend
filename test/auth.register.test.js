@@ -3,6 +3,34 @@ const assert = require('node:assert/strict');
 
 const { validateRegistration } = require('../src/validators/auth.validator');
 
+for (const [id, field, value] of [
+  ['REG-003', 'email', ''],
+  ['REG-005', 'password', ''],
+  ['REG-006', 'email', 'luis.cliente@'],
+  ['REG-010', 'role', ''],
+  ['REG-014', 'role', 'SUPERUSUARIO'],
+  ['REG-026', 'accountStatus', 'SUSPENDED'],
+  ['REG-028', 'name', ''],
+  ['REG-033', 'email', 'ana cliente@test.com'],
+]) {
+  test(`${id}: rechaza ${field} inválido e identifica el campo`, () => {
+    const input = {
+      name: 'Cliente de prueba', email: 'cliente@example.com', password: '12345678',
+      role: 'CLIENT', phone: '+5491123456789',
+    };
+
+    assert.throws(() => validateRegistration({ ...input, [field]: value }), error => {
+      assert.equal(error.status, 400);
+      assert.equal(error.type, '/problems/validation-error');
+      assert.equal(error.errors.length, 1);
+      assert.equal(error.errors[0].field, field);
+      assert.equal(typeof error.errors[0].detail, 'string');
+      assert.ok(error.errors[0].detail.length > 0);
+      return true;
+    });
+  });
+}
+
 test('rechaza una contraseña de menos de 8 caracteres', () => {
   const input = {
     name: 'Cliente de prueba',

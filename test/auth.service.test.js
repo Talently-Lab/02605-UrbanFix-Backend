@@ -152,6 +152,75 @@ test('devuelve error 409 cuando el email ya está registrado', async () => {
   );
 });
 
+for (const [existingRole, requestedRole] of [['CLIENT', 'TECHNICIAN'], ['TECHNICIAN', 'CLIENT']]) {
+  test(`email existente de ${existingRole} rechaza registro ${requestedRole} sin efectos parciales`, async () => {
+    const input = {
+      name: 'Cuenta nueva', email: 'existente@example.com', password: '12345678',
+      role: requestedRole, phone: '+5491123456789',
+      ...(requestedRole === 'TECHNICIAN' && {
+        specialties: [{ category: 'PLUMBING' }],
+        neighborhoodIds: ['11111111-1111-4111-8111-111111111111'],
+      }),
+    };
+    const state = {
+      users: [{ id: 'existing-user', name: 'Cuenta existente', email: input.email, role: existingRole }],
+      technicians: existingRole === 'TECHNICIAN'
+        ? [{ id: 'existing-technician', userId: 'existing-user', approvalStatus: 'APPROVED' }] : [],
+    };
+    const before = structuredClone(state);
+    const calls = [];
+    const conflict = Object.assign(new Error('Unique constraint failed'), {
+      code: 'P2002', meta: { target: 'User_email_case_insensitive' },
+    });
+    const tx = {
+      user: { create: async ({ data }) => {
+        calls.push('user.create');
+        assert.equal(data.email, state.users[0].email);
+        assert.equal(data.role, requestedRole);
+        throw conflict;
+      } },
+      technician: { create: async () => {
+        calls.push('technician.create');
+        assert.fail('No debe crear un perfil técnico después del conflicto de email');
+      } },
+    };
+    const prisma = {
+      ...tx,
+      $transaction: async callback => {
+        calls.push('transaction.begin');
+        try {
+          const result = await callback(tx);
+          calls.push('transaction.commit');
+          return result;
+        } catch (error) {
+          assert.equal(error, conflict);
+          calls.push('transaction.rollback');
+          throw error;
+        }
+      },
+    };
+
+    await assert.rejects(registerUser(input, {
+      prisma,
+      hashPassword: async password => {
+        assert.equal(password, input.password);
+        calls.push('hash');
+        return 'hash-simulado';
+      },
+    }), error => {
+      assert.equal(error.status, 409);
+      assert.equal(error.type, '/problems/email-already-registered');
+      assert.equal(error.message, 'El email ya está registrado');
+      return true;
+    });
+
+    assert.deepEqual(calls, requestedRole === 'TECHNICIAN'
+      ? ['hash', 'transaction.begin', 'user.create', 'transaction.rollback']
+      : ['hash', 'user.create']);
+    assert.deepEqual(state, before);
+  });
+}
+
 test('no confunde otras restricciones únicas con un email duplicado', async () => {
   const input = {
     name: 'Cliente de prueba',
