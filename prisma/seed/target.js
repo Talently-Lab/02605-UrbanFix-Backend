@@ -9,6 +9,37 @@ const SEED_TARGETS = Object.freeze({
   urbanfix_seed_cp21_test: '55434',
   urbanfix_seed_cp21_concurrency_test: '55434',
 });
+const authorizedNeonTargets = new WeakSet();
+
+function validateNeonTarget(connectionString, mode, env) {
+  const authorization = JSON.parse(env.URBANFIX_SEED_NEON_AUTHORIZATION);
+  const url = new URL(connectionString);
+  const branchMode = authorization?.branch === 'golden' ? 'golden'
+    : authorization?.branch === 'preproduction' ? 'volume' : undefined;
+  if (env.URBANFIX_SEED_ALLOW_NEON !== '1' || authorization?.project !== '02605-urbanfix' ||
+      !branchMode || (mode !== 'catalog' && mode !== branchMode) ||
+      !/^ep-[a-z0-9-]+\.[a-z0-9.-]+\.neon\.tech$/.test(authorization.host) ||
+      url.hostname !== authorization.host || (url.port && url.port !== '5432') ||
+      typeof authorization.database !== 'string' || !/^[a-zA-Z0-9_]+$/.test(authorization.database) || url.pathname !== `/${authorization.database}` ||
+      !/^[a-zA-Z0-9_]+$/.test(authorization.user) || decodeURIComponent(url.username) !== authorization.user ||
+      !url.password || url.hash || !url.search ||
+      url.searchParams.get('sslmode') !== 'verify-full' ||
+      [...url.searchParams].some(([key, value]) => !['sslmode', 'channel_binding'].includes(key) ||
+        url.searchParams.getAll(key).length !== 1 || (key === 'channel_binding' && value !== 'require')) ||
+      (env.DATABASE_URL !== undefined && env.DATABASE_URL !== connectionString)) throw new Error();
+  decodeURIComponent(url.password);
+  const target = Object.freeze({ database: authorization.database, user: authorization.user, mode });
+  authorizedNeonTargets.add(target);
+  return target;
+}
+
+function assertSeedIdentity(identity, mode, target) {
+  const expectedDatabase = mode === 'golden' ? GOLDEN_DATABASE : VOLUME_DATABASE;
+  const valid = target
+    ? authorizedNeonTargets.has(target) && target.mode === mode && identity?.database === target.database && identity?.user === target.user
+    : mode === 'catalog' ? Object.hasOwn(SEED_TARGETS, identity?.database) : identity?.database === expectedDatabase;
+  if (!valid || identity?.schema !== 'public') throw new Error('Identidad de la base no autorizada');
+}
 
 function validateSeedOptions({ args, env }) {
   if (!Array.isArray(args) || args.length !== 1 || !['--mode=catalog', '--mode=golden', '--mode=volume'].includes(args[0])) {
@@ -18,6 +49,11 @@ function validateSeedOptions({ args, env }) {
   const connectionString = env.URBANFIX_SEED_DATABASE_URL;
   const production = typeof env.NODE_ENV === 'string' && env.NODE_ENV.trim().toLowerCase() === 'production';
   try {
+    if (production || typeof connectionString !== 'string' || /[\s\\#]/.test(connectionString)) throw new Error();
+    if (/^postgres(?:ql)?:\/\//.test(connectionString) && new URL(connectionString).hostname !== '127.0.0.1') {
+      const target = validateNeonTarget(connectionString, mode, env);
+      return { mode, connectionString, target };
+    }
     if (production || typeof connectionString !== 'string' || /[\s\\?#]/.test(connectionString) ||
         !/^postgres(?:ql)?:\/\/(?:[^@/?#\\\s]+@)?127\.0\.0\.1:(?:55432|55433|55434)\/[a-z0-9_]+$/.test(connectionString)) {
       throw new Error();
@@ -42,24 +78,27 @@ function validateGoldenIntegrationOptions(env) {
   if (env.URBANFIX_RUN_SEED_DB_TESTS !== '1') {
     throw new Error('Integración Golden no autorizada');
   }
-  const { connectionString } = validateSeedOptions({ args: ['--mode=golden'], env });
+  const { connectionString, target } = validateSeedOptions({ args: ['--mode=golden'], env });
+  if (target) throw new Error('Integración Golden no autorizada');
   return { connectionString };
 }
 
 function validateVolumeIntegrationOptions(env) {
   if (env.URBANFIX_RUN_SEED_DB_TESTS !== '1') throw new Error('Integración Volumen no autorizada');
-  const { connectionString } = validateSeedOptions({ args: ['--mode=volume'], env });
+  const { connectionString, target } = validateSeedOptions({ args: ['--mode=volume'], env });
+  if (target) throw new Error('Integración Volumen no autorizada');
   return { connectionString };
 }
 
 function validateSeedIntegrationOptions(env) {
   try {
     if (env.URBANFIX_RUN_SEED_DB_TESTS !== '1') throw new Error();
-    const { connectionString } = validateSeedOptions({ args: ['--mode=catalog'], env });
-    const { connectionString: concurrencyConnectionString } = validateSeedOptions({
+    const { connectionString, target } = validateSeedOptions({ args: ['--mode=catalog'], env });
+    const { connectionString: concurrencyConnectionString, target: concurrencyTarget } = validateSeedOptions({
       args: ['--mode=catalog'],
       env: { ...env, URBANFIX_SEED_DATABASE_URL: env.URBANFIX_SEED_CONCURRENCY_DATABASE_URL },
     });
+    if (target || concurrencyTarget) throw new Error();
     const database = new URL(connectionString).pathname;
     const concurrencyDatabase = new URL(concurrencyConnectionString).pathname;
     const authorizedPair = [
@@ -75,5 +114,5 @@ function validateSeedIntegrationOptions(env) {
   }
 }
 
-module.exports = { SEED_TARGETS, GOLDEN_DATABASE, VOLUME_DATABASE, validateSeedOptions,
+module.exports = { SEED_TARGETS, GOLDEN_DATABASE, VOLUME_DATABASE, validateSeedOptions, assertSeedIdentity,
   validateSeedIntegrationOptions, validateGoldenIntegrationOptions, validateVolumeIntegrationOptions };

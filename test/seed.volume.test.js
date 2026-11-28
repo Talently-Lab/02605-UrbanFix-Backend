@@ -43,7 +43,7 @@ test('Volumen incluye cuentas y solicitudes de prueba en los 62 usuarios y 200 s
   for (const user of data.user) {
     assert.match(user.email, /^urbanfix\.volume\.[act]\d+@example\.com$/);
     if (user.role === 'ADMIN') assert.equal(user.phone, null);
-    else assert.match(user.phone, /^\+[1-9][0-9]{1,14}$/);
+    else assert.equal(require('../src/validators/phone.validator').isArgentinePhone(user.phone), true);
   }
   const suspended = data.user.find(row => row.accountStatus === 'SUSPENDED');
   const tech = data.technician.find(row => row.userId === suspended.id);
@@ -154,7 +154,7 @@ test('calibración conserva todos los campos salvo nueve aceptaciones y diez est
   for (const row of data.serviceRequest) if (requests.has(Number(row.id.slice(-12)))) delete row.acceptedAt;
   for (const row of data.serviceOffer) if (offers.has(Number(row.id.slice(-12)))) delete row.status;
   assert.equal(require('node:crypto').createHash('sha256').update(JSON.stringify(data)).digest('hex'),
-    '6635a2c81fe0508199b4e7b38886cb46a84eba7ff300c20ca8a9f64601447a75');
+    '471e3195f72169a348e8a1c25ae6a069260eb838563fa82c35280ff906f77a35');
 });
 
 const tables = ['user', 'technician', 'technicianSpecialty', 'technicianNeighborhood', 'serviceRequest', 'serviceOffer'];

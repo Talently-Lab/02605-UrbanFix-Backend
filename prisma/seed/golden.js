@@ -1,6 +1,7 @@
+const { isArgentinePhone } = require('../../src/validators/phone.validator');
 const { REFERENCE } = require('../data/golden');
 const { validateCatalogCsv } = require('./validate');
-const { GOLDEN_DATABASE } = require('./target');
+const { assertSeedIdentity } = require('./target');
 
 function validateGoldenDataset(data) {
   const check = (condition) => { if (!condition) throw new Error('Golden inválido'); };
@@ -35,7 +36,7 @@ function validateGoldenDataset(data) {
     check(typeof user.name === 'string' && user.name.length > 0 &&
       /^urbanfix\.golden\.[act]\d@example\.com$/.test(user.email));
     check(typeof user.passwordHash === 'string' && /^\$2[aby]\$10\$[./A-Za-z0-9]{53}$/.test(user.passwordHash));
-    check(user.role === 'ADMIN' ? user.phone === null : /^\+[1-9][0-9]{1,14}$/.test(user.phone || ''));
+    check(user.role === 'ADMIN' ? user.phone === null : isArgentinePhone(user.phone));
     check(user.isTestUser === ['Golden C7', 'Golden T9'].includes(user.name));
     check(user.lastLoginAt === null);
     date(user.createdAt);
@@ -144,7 +145,7 @@ function validateGoldenDataset(data) {
   return data;
 }
 
-async function seedGolden(prisma, dataset, csv) {
+async function seedGolden(prisma, dataset, csv, target) {
   validateGoldenDataset(dataset);
   const catalog = validateCatalogCsv(csv);
   const tables = ['user', 'technician', 'technicianSpecialty', 'technicianNeighborhood', 'serviceRequest', 'serviceOffer'];
@@ -152,10 +153,8 @@ async function seedGolden(prisma, dataset, csv) {
   const key = (row) => row.id || `${row.technicianId}/${row.category || row.neighborhoodId}`;
   const value = (field) => field instanceof Date ? field.toISOString() : field;
   return prisma.$transaction(async (tx) => {
-    const [identity] = await tx.$queryRaw`SELECT current_database() AS database, current_schema() AS schema`;
-    if (identity?.database !== GOLDEN_DATABASE || identity?.schema !== 'public') {
-      throw new Error('Identidad de la base Golden no autorizada');
-    }
+    const [identity] = await tx.$queryRaw`SELECT current_database() AS database, current_schema() AS schema, current_user AS user`;
+    assertSeedIdentity(identity, 'golden', target);
     const neighborhoods = await tx.neighborhood.findMany({ select: { id: true, name: true, comuna: true } });
     const official = new Map(catalog.map(row => [row.name, row.comuna]));
     if (neighborhoods.length !== 48 || new Set(neighborhoods.map(row => row.name)).size !== 48 ||

@@ -1,7 +1,7 @@
 const { validateCatalogCsv } = require('./validate');
-const { SEED_TARGETS } = require('./target');
+const { assertSeedIdentity } = require('./target');
 
-async function seedCatalog(prisma, csv) {
+async function seedCatalog(prisma, csv, target) {
   const catalog = validateCatalogCsv(csv);
   const officialCommunes = new Map(
     catalog.map((row) => [row.name, row.comuna]),
@@ -9,13 +9,8 @@ async function seedCatalog(prisma, csv) {
   return prisma.$transaction(
     async (tx) => {
       const [identity] =
-        await tx.$queryRaw`SELECT current_database() AS database, current_schema() AS schema`;
-      if (
-        !Object.hasOwn(SEED_TARGETS, identity?.database) ||
-        identity?.schema !== 'public'
-      ) {
-        throw new Error('Identidad de la base no autorizada');
-      }
+        await tx.$queryRaw`SELECT current_database() AS database, current_schema() AS schema, current_user AS user`;
+      assertSeedIdentity(identity, 'catalog', target);
       const existing = await tx.neighborhood.findMany({
         select: { id: true, name: true, comuna: true },
       });

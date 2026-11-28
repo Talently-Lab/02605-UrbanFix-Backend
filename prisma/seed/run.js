@@ -18,7 +18,7 @@ async function runSeed({
   readVolume = reference => require('../data/volume').createVolumeDataset(reference),
   createClient = createSeedClient,
 } = {}) {
-  const { mode, connectionString } = validateSeedOptions({ args, env });
+  const { mode, connectionString, target } = validateSeedOptions({ args, env });
   const csv = readCatalog();
   validateCatalogCsv(csv);
   let golden;
@@ -35,15 +35,15 @@ async function runSeed({
   }
   const prisma = createClient(connectionString);
   try {
-    if (mode === 'volume') return await require('./volume').seedVolume(prisma, volume, csv);
-    return mode === 'golden' ? await require('./golden').seedGolden(prisma, golden, csv) : await seedCatalog(prisma, csv);
+    if (mode === 'volume') return await require('./volume').seedVolume(prisma, volume, csv, target);
+    return mode === 'golden' ? await require('./golden').seedGolden(prisma, golden, csv, target) : await seedCatalog(prisma, csv, target);
   } finally {
     await prisma.$disconnect();
   }
 }
 
-if (require.main === module) {
-  runSeed().then(result => {
+function runSeedCli() {
+  return runSeed().then(result => {
     console.log(JSON.stringify({ mode: process.argv[2].slice('--mode='.length), ...result }));
   }).catch(error => {
     const discrepancy = error?.code === 'SEED_CATALOG_DISCREPANCY' &&
@@ -55,4 +55,6 @@ if (require.main === module) {
   });
 }
 
-module.exports = { runSeed };
+if (require.main === module) runSeedCli();
+
+module.exports = { runSeed, runSeedCli };

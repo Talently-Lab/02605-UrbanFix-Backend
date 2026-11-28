@@ -15,7 +15,7 @@ function createGoldenDataset() {
   };
   const user = Object.entries(registrations).map(([key, createdAt], index) => ({
     id: ids[key], name: `Golden ${key}`, email: `urbanfix.golden.${key.toLowerCase()}@example.com`,
-    phone: key === 'A1' ? null : `+549110000${String(index).padStart(4, '0')}`,
+    phone: key === 'A1' ? null : `+549116400${String(index).padStart(4, '0')}`,
     passwordHash, role: key[0] === 'A' ? 'ADMIN' : key[0] === 'C' ? 'CLIENT' : 'TECHNICIAN',
     accountStatus: key === 'T8' ? 'SUSPENDED' : 'ACTIVE', lastLoginAt: null,
     isTestUser: ['C7', 'T9'].includes(key), createdAt: instant(createdAt),
